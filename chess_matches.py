@@ -32,32 +32,31 @@ for i in range(gamecount):
                 del labels
                 del x_samples
                 x_samples, labels = None, []
+                current += 1
                 batches += 1
             
             if batches == max_batch:
                 exit(0)
-
-            board.push(mv)
+            try:
+                board.push(mv)
+            except:
+                continue
             if x_samples is not None:
                 x_samples = np.hstack((x_samples, tools.fen_to_board(board.fen())))
             else:
                 x_samples = tools.fen_to_board(board.fen())
             try:
-                result = engine.play(board,chess.engine.Limit(time=0.00000000000000001))
+                result = engine.play(board,chess.engine.Limit(time=0.000000001))
             except:
                 x_samples = np.delete(x_samples, x_samples.shape[1] - 1, 1)
-                print("Result is None")
-                print("x samples shape:", x_samples.shape)
-                print("labels shape:", len(labels))
+                print("First loop exception")
                 board = chess.Board()
                 continue
             if result.move is None:
                 x_samples = np.delete(x_samples, x_samples.shape[1] - 1, 1)
-                print("Result is None")
-                print("x samples shape:", x_samples.shape)
-                print("labels shape:", len(labels))
+                print("1Result is None")
                 board = chess.Board()
-                continue
+                break
             labels.append(str(result.move))
             board.push(result.move)
 
@@ -67,30 +66,29 @@ for i in range(gamecount):
                     del x_samples
                     del labels
                     x_samples, labels = None, []
+                    current += 1
                     batches += 1
 
                 if batches == max_batch:
                     exit(0)
-
-                board.push(mv2)
+                try:
+                    board.push(mv2)
+                except:
+                    continue
                 if x_samples is not None:
                     x_samples = np.hstack((x_samples, tools.fen_to_board(board.fen())))
                 else:
                     x_samples = tools.fen_to_board(board.fen())
                 try:
-                    result2 = engine.play(board,chess.engine.Limit(time=0.00000000000000001))
+                    result2 = engine.play(board,chess.engine.Limit(time=0.000000001))
                 except:
                     x_samples = np.delete(x_samples, x_samples.shape[1] - 1, 1)
-                    print("Result is None")
-                    print("x samples shape:", x_samples.shape)
-                    print("labels shape:", len(labels))
+                    print("Second loop exception")
                     broken = True
                     break
                 if result2.move is None:
                     x_samples = np.delete(x_samples, x_samples.shape[1] - 1, 1)
-                    print("Result is None")
-                    print("x samples shape:", x_samples.shape)
-                    print("labels shape:", len(labels))
+                    print("2Result is None")
                     broken = True
                     break
                 labels.append(str(result2.move))
