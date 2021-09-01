@@ -2,8 +2,8 @@ import numpy as np
 from ChessModelTools import Tools
 import chess
 import pandas as pd
-import sqlalchemy
-from sqlalchemy import create_engine
+# import sqlalchemy
+# from sqlalchemy import create_engine
 import chess.engine
 import os
 import sys
@@ -16,12 +16,6 @@ engine = chess.engine.SimpleEngine.popen_uci("stockfish_14_linux_x64_avx2/stockf
 
 tools = Tools()
 
-MYSQL_USER = "ant"
-MYSQL_PWD = "root"
-MYSQL_HOST = "localhost"
-MYSQL_DB = "chessdata"
-mysql = 'mysql+mysqldb://{}:{}@{}/{}'.format(MYSQL_USER, MYSQL_PWD, MYSQL_HOST, MYSQL_DB)
-sql_engine = create_engine(mysql)
 
 current = tools.load("data/current.pkl")
 x_samples, labels = None, []
@@ -34,7 +28,7 @@ for i in range(gamecount):
     while not board.is_game_over():
         for mv in board.legal_moves:
             if x_samples is not None and x_samples.shape[1] == 50000:
-                tools.save_data_to_MySql(x_samples, labels, current, sql_engine)
+                tools.save_data_to_MySql(x_samples, labels, current)
                 del labels
                 del x_samples
                 x_samples, labels = None, []
@@ -61,7 +55,7 @@ for i in range(gamecount):
 
             for mv2 in board.legal_moves:
                 if x_samples is not None and x_samples.shape[1] == 50000:
-                    tools.save_data_to_MySql(x_samples, labels, current, sql_engine)
+                    tools.save_data_to_MySql(x_samples, labels, current)
                     del x_samples
                     del labels
                     x_samples, labels = None, []
@@ -74,7 +68,7 @@ for i in range(gamecount):
                 if x_samples is not None:
                     x_samples = np.hstack((x_samples, tools.fen_to_board(board.fen())))
                 else:
-                    x_samples = np.hstack((x_samples, tools.fen_to_board(board.fen())))
+                    x_samples = tools.fen_to_board(board.fen())
                 result2 = engine.play(board,chess.engine.Limit(time=0.00000000000000001))
                 if result2.move is None:
                     x_samples = np.delete(x_samples, x_samples.shape[1] - 1, 1)

@@ -1,4 +1,4 @@
 from ChessModelTools import Tools
 
 tools = Tools()
-tools.save(1, "data/current.pkl")
+tools.save(2, "data/current.pkl")

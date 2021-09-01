@@ -1,10 +1,23 @@
 import numpy as np
 import pickle
 import pandas as pd
+import sqlalchemy
+from sqlalchemy import create_engine
+
+MYSQL_USER = "ant"
+MYSQL_PWD = "root"
+MYSQL_HOST = "localhost"
+MYSQL_DB = "chessdata"
+MYSQL = 'mysql+mysqldb://{}:{}@{}/{}'.format(MYSQL_USER, MYSQL_PWD, MYSQL_HOST, MYSQL_DB)
+sql_engine = create_engine(MYSQL)
 
 
 class Tools():
     """Tools for making chess ai model"""
+
+    def __init__(self):
+        self.engine = sql_engine
+
 
     def save(self, obj, filename):
         """Saves pickled object to .pkl file"""
@@ -30,14 +43,32 @@ class Tools():
         del classes
         return pd.DataFrame(nums, dtype=np.int)
 
-    def save_data_to_MySql(self, x_samples, labels, current, engine):
+    def save_data_to_MySql(self, x_samples, labels, current):
         x = pd.DataFrame(x_samples, dtype=np.int)
         y = self.label_nums(labels)
         print("\tX_samples shape:", x_samples.shape)
         print("\tLabels shape:", y.shape)
-        x.to_sql("Input_Features_{}".format(current), engine)
-        y.to_sql("Labels_{}".format(current))
+        x.T.to_sql("Input_Features_{}".format(current), self.engine)
+        y.to_sql("Labels_{}".format(current), self.engine)
         print("Saved!")
+
+    def retrieve_MySql_table(self, count):
+        x = pd.read_sql_table("Input_Features_{}".format(count), self.engine)
+        y = pd.read_sql_table("Labels_{}".format(count), self.engine)
+        return x, y
+
+    def one_hot_encode(self, Y, classes):
+        """
+        One hot encode function to be used to reshape
+        Y_label vector
+        """
+        if type(Y) is not np.ndarray:
+            Y = Y.to_numpy()
+            # print("encode", Y.shape)
+        mat_encode = np.zeros((len(Y), classes))
+        for x, label in enumerate(Y.T[1]):
+            mat_encode[x, label] = 1
+        return pd.DataFrame(mat_encode)
 
     def fen_to_board(self, fen):
         pieces = {
