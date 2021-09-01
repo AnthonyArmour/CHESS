@@ -42,7 +42,15 @@ for i in range(gamecount):
                 x_samples = np.hstack((x_samples, tools.fen_to_board(board.fen())))
             else:
                 x_samples = tools.fen_to_board(board.fen())
-            result = engine.play(board,chess.engine.Limit(time=0.00000000000000001))
+            try:
+                result = engine.play(board,chess.engine.Limit(time=0.00000000000000001))
+            except:
+                x_samples = np.delete(x_samples, x_samples.shape[1] - 1, 1)
+                print("Result is None")
+                print("x samples shape:", x_samples.shape)
+                print("labels shape:", len(labels))
+                board = chess.Board()
+                continue
             if result.move is None:
                 x_samples = np.delete(x_samples, x_samples.shape[1] - 1, 1)
                 print("Result is None")
@@ -69,7 +77,15 @@ for i in range(gamecount):
                     x_samples = np.hstack((x_samples, tools.fen_to_board(board.fen())))
                 else:
                     x_samples = tools.fen_to_board(board.fen())
-                result2 = engine.play(board,chess.engine.Limit(time=0.00000000000000001))
+                try:
+                    result2 = engine.play(board,chess.engine.Limit(time=0.00000000000000001))
+                except:
+                    x_samples = np.delete(x_samples, x_samples.shape[1] - 1, 1)
+                    print("Result is None")
+                    print("x samples shape:", x_samples.shape)
+                    print("labels shape:", len(labels))
+                    broken = True
+                    break
                 if result2.move is None:
                     x_samples = np.delete(x_samples, x_samples.shape[1] - 1, 1)
                     print("Result is None")
@@ -81,6 +97,7 @@ for i in range(gamecount):
                 board.pop()
             if broken is True:
                 board = chess.Board()
+                broken = False
                 continue
             board.pop()
             board.pop()
@@ -93,15 +110,8 @@ for i in range(gamecount):
                 print("end of game?")
                 print(x_samples.shape)
                 print(len(labels))
-                numbered_labels = tools.label_nums(labels)
-                print("labeled numbers:", numbered_labels.shape)
+                board = chess.Board()
 
 
 engine.quit()
 
-        # if len(labels) == 20:
-        #     # numbered_labels = tools.label_nums(labels)
-        #     # print(numbered_labels)
-        #     print(x_samples[:, :5])
-        #     print(x_samples.shape)
-        #     exit()

@@ -1,7 +1,7 @@
 import numpy as np
 import chess
 import chess.engine
-from save import save, load
+from ChessModelTools import Tools
 import os
 import sys
 
@@ -10,12 +10,13 @@ gamecount = int(arguments[1])
 path = os.getcwd()
 engine = chess.engine.SimpleEngine.popen_uci("stockfish_14_linux_x64_avx2/stockfish_14_x64_avx2")
 
-dictsidetomove = {True:'white',False:'black'}
-notationdict = {True:'.', False:'...'}
+tools = Tools()
 
 # board.fen()
 
-classes = load("data/classes.pkl")
+classes = tools.load("data/classes.pkl")
+if classes is not None:
+    classes = list(classes.keys())
 if classes is None:
     classes = []
 
@@ -43,6 +44,6 @@ k = {}
 for x, key in enumerate(classes):
     k[key] = x
 
-save(k, "data/classes.pkl")
+tools.save(k, "data/classes.pkl")
 print("Saved!")
 engine.quit()
