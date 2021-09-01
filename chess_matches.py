@@ -25,7 +25,7 @@ sql_engine = create_engine(mysql)
 
 current = tools.load("data/current.pkl")
 x_samples, labels = None, []
-batches = 0
+batches, broken = 0, False
 
 
 for i in range(gamecount):
@@ -54,7 +54,8 @@ for i in range(gamecount):
                 print("Result is None")
                 print("x samples shape:", x_samples.shape)
                 print("labels shape:", len(labels))
-                exit(0)
+                board = chess.Board()
+                continue
             labels.append(str(result.move))
             board.push(result.move)
 
@@ -80,9 +81,13 @@ for i in range(gamecount):
                     print("Result is None")
                     print("x samples shape:", x_samples.shape)
                     print("labels shape:", len(labels))
-                    exit(0)
+                    broken = True
+                    break
                 labels.append(str(result2.move))
                 board.pop()
+            if broken is True:
+                board = chess.Board()
+                continue
             board.pop()
             board.pop()
 
