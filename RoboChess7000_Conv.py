@@ -1,7 +1,7 @@
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Activation, Dense, BatchNormalization
+from tensorflow.keras.layers import Activation, Dense, BatchNormalization, Conv2D, MaxPool2D, Flatten
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.metrics import categorical_crossentropy
 from ChessModelTools import Tools
@@ -20,15 +20,28 @@ L = len(classes)
 # model = keras.model.load_model("Robo6000")
 
 model = Sequential()
-model.add(Dense(units=256))
+model.add(Conv2D(filters=32, kernel_size=(3, 3), padding="same"))
 model.add(BatchNormalization())
 model.add(Activation("tanh"))
+model.add(MaxPool2D(pool_size=(2, 2)))
 
-model.add(Dense(units=256))
+model.add(Conv2D(filters=64, kernel_size=(3, 3), padding="same"))
 model.add(BatchNormalization())
 model.add(Activation("tanh"))
+model.add(MaxPool2D(pool_size=(2, 2)))
 
-model.add(Dense(units=256))
+# model.add(Dense(units=256))
+# model.add(BatchNormalization())
+# model.add(Activation("tanh"))
+
+model.add(Conv2D(filters=64, kernel_size=(3, 3), padding="same"))
+model.add(BatchNormalization())
+model.add(Activation("tanh"))
+model.add(MaxPool2D(pool_size=(2, 2)))
+
+model.add(Flatten())
+
+model.add(Dense(units=320))
 model.add(BatchNormalization())
 model.add(Activation("tanh"))
 
@@ -44,7 +57,7 @@ for epoch in range(int(epochs)):
     print("\n\nEpoch:", epoch)
     for batch in np.random.permutation(count):
         print("\tBatch:", batch)
-        x_sample, labels = tools.retrieve_MySql_table(batch)
+        x_sample, labels = tools.retrieve_MySql_table(batch, conv=True)
         one_hot = tools.one_hot_encode(labels, L)
         del labels
         # print(x_sample.shape)
@@ -55,4 +68,4 @@ for epoch in range(int(epochs)):
             epochs=1, verbose=2, shuffle=True
             )
 
-model.save("Robo6000")
+model.save("Robo7000_Conv")

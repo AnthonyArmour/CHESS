@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import sqlalchemy
+from ChessModelTools import Tools
 from sqlalchemy import create_engine
 
 # HBNB_MYSQL_USER = "ant"
@@ -19,5 +20,19 @@ from sqlalchemy import create_engine
 # nums = np.reshape(nums, (3, 4))
 # nums = np.delete(nums, nums.shape[1] - 1, 1)
 # print(nums)
-count = np.arange(1, 17)
-print(count)
+tools = Tools()
+
+# count = np.arange(64)
+# count2 = np.arange(64)
+# count3 = np.arange(64)
+# count4 = np.arange(64)
+# arr = np.array([count, count2, count3, count4])
+# arr = np.reshape(arr, (4, 8, 8))
+# print(arr)
+
+x, y = tools.retrieve_MySql_table(1, conv=True)
+print(x.shape)
+# x = x.to_numpy()
+# x = pd.DataFrame(np.delete(x, 0, 1))
+
+# print(x.shape)

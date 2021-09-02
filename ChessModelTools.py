@@ -3,6 +3,7 @@ import pickle
 import pandas as pd
 import sqlalchemy
 from sqlalchemy import create_engine
+from tensorflow.python.keras.backend import dtype
 
 MYSQL_USER = "ant"
 MYSQL_PWD = "root"
@@ -52,8 +53,13 @@ class Tools():
         y.to_sql("Labels_{}".format(current), self.engine)
         print("Saved!")
 
-    def retrieve_MySql_table(self, count):
+    def retrieve_MySql_table(self, count, conv=False):
         x = pd.read_sql_table("Input_Features_{}".format(count), self.engine)
+        x = np.delete(x.to_numpy(), 0, 1)
+        if conv is True:
+            x = (np.reshape(x, (50000, 8, 8, 1))).astype(np.float32)
+        else:
+            x = pd.DataFrame(x, dtype=np.int)
         y = pd.read_sql_table("Labels_{}".format(count), self.engine)
         return x, y
 

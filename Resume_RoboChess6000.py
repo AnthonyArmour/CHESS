@@ -17,26 +17,7 @@ tools = Tools()
 classes = tools.load("data/classes.pkl")
 L = len(classes)
 
-# model = keras.model.load_model("Robo6000")
-
-model = Sequential()
-model.add(Dense(units=256))
-model.add(BatchNormalization())
-model.add(Activation("tanh"))
-
-model.add(Dense(units=256))
-model.add(BatchNormalization())
-model.add(Activation("tanh"))
-
-model.add(Dense(units=256))
-model.add(BatchNormalization())
-model.add(Activation("tanh"))
-
-model.add(Dense(units=L))
-model.add(BatchNormalization())
-model.add(Activation("softmax"))
-
-model.compile(optimizer=Adam(learning_rate=0.001), loss='categorical_crossentropy', metrics=['accuracy'])
+model = keras.models.load_model("Robo6000")
 
 count = np.arange(1, 16)
 
