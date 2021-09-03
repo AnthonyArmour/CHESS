@@ -1,4 +1,3 @@
-from ChessModelTools import Tools
 import chess
 import chess.engine
 import tensorflow as tf
@@ -8,7 +7,8 @@ from tensorflow.keras.layers import Activation, Dense, BatchNormalization, Conv2
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.regularizers import L2
 from tensorflow.keras.metrics import categorical_crossentropy
-from ChessModelTools import Tools
+from ChessModelTools_v3 import Tools
+import random
 import numpy as np
 import pandas as pd
 import os
@@ -30,18 +30,21 @@ epoch = 0
 
 classes = tools.load("data/classes.pkl")
 L = len(classes)
+# model = keras.models.load_model("SGD_RoboConv_1.0")
 model = tools.get_ConvNet(L)
 del classes
 
 x_valid, validation_labels = tools.MySql_Validation_data(16, conv=True)
-validation_data = (x_valid, tools.one_hot_encode(validation_labels, L))
+validation_data = (x_valid, tools.one_hot_encode(validation_labels, L, valid=True))
 
 for i in range(gamecount):
     print("Game: ", i)
     board = chess.Board() #give whatever starting position here
     while not board.is_game_over():
         for mv in board.legal_moves:
-            if x_samples is not None and x_samples.shape[1] == 5000:
+            if random.random() > 0.7:
+                continue
+            if x_samples is not None and x_samples.shape[1] == 15000:
                 # tools.save_data_to_MySql(x_samples, labels, current)
                 print("Epoch {}:".format(epoch))
                 epoch += 1
@@ -55,7 +58,7 @@ for i in range(gamecount):
                 batches += 1
             
             if batches == max_batch:
-                exit(0)
+                model.save("SGD_RoboConv_3.0")
             try:
                 board.push(mv)
             except:
@@ -80,7 +83,9 @@ for i in range(gamecount):
             board.push(result.move)
 
             for mv2 in board.legal_moves:
-                if x_samples is not None and x_samples.shape[1] == 5000:
+                if random.random() > 0.5:
+                    continue
+                if x_samples is not None and x_samples.shape[1] == 15000:
                     # tools.save_data_to_MySql(x_samples, labels, current)
                     print("Epoch {}:".format(epoch))
                     epoch += 1
@@ -94,7 +99,7 @@ for i in range(gamecount):
                     batches += 1
 
                 if batches == max_batch:
-                    exit(0)
+                    model.save("SGD_RoboConv_3.0")
                 try:
                     board.push(mv2)
                 except:
@@ -136,5 +141,5 @@ for i in range(gamecount):
 
 
 engine.quit()
-model.save("SGD_RoboConv_1.0")
+model.save("SGD_RoboConv_3.0")
 
