@@ -4,6 +4,17 @@ import pandas as pd
 import sqlalchemy
 from sqlalchemy import create_engine
 from tensorflow.python.keras.backend import dtype
+import tensorflow.keras as k
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Activation, Dense, BatchNormalization, Conv2D, MaxPool2D, Flatten
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.regularizers import L2
+from tensorflow.keras.metrics import categorical_crossentropy
+from ChessModelTools import Tools
+import os
+import sys
 
 MYSQL_USER = "ant"
 MYSQL_PWD = "root"
@@ -42,7 +53,8 @@ class Tools():
         for x, label in enumerate(labels):
             nums[x][0] = classes[label]
         del classes
-        return pd.DataFrame(nums, dtype=np.int)
+        return nums.T
+        # return pd.DataFrame(nums, dtype=np.int)
 
     def save_data_to_MySql(self, x_samples, labels, current):
         x = pd.DataFrame(x_samples, dtype=np.int)
@@ -52,6 +64,19 @@ class Tools():
         x.T.to_sql("Input_Features_{}".format(current), self.engine)
         y.to_sql("Labels_{}".format(current), self.engine)
         print("Saved!")
+
+    def train_RoboChess_SGD(self, model, x_samples, labels, valid, L, conv=False):
+        if conv is True:
+            x_samples = (np.reshape(x_samples, (50000, 8, 8, 1))).astype(np.float32)
+        labels = self.label_nums(labels)
+        one_hot = self.one_hot_encode(labels, L)
+        del labels
+        model.fit(
+            x=x_samples, y=one_hot, batch_size=250,
+            epochs=1, verbose=True, shuffle=True,
+            validation_data=valid
+            )
+
 
     def retrieve_MySql_table(self, count, conv=False):
         x = pd.read_sql_table("Input_Features_{}".format(count), self.engine)
@@ -63,6 +88,16 @@ class Tools():
         y = pd.read_sql_table("Labels_{}".format(count), self.engine)
         return x, y
 
+    def MySql_Validation_data(self, count, conv=False):
+        x = pd.read_sql_table("Input_Features_{}".format(count), self.engine)
+        x = np.delete(x.to_numpy(), 0, 1)
+        if conv is True:
+            x = (np.reshape(x[:15000, :], (15000, 8, 8, 1))).astype(np.float32)
+        else:
+            x = pd.DataFrame(x, dtype=np.int)
+        y = pd.read_sql_table("Labels_{}".format(count), self.engine)
+        return x, y.to_numpy()[:15000, :]
+
     def one_hot_encode(self, Y, classes):
         """
         One hot encode function to be used to reshape
@@ -70,11 +105,7 @@ class Tools():
         """
         if type(Y) is not np.ndarray:
             Y = Y.to_numpy()
-            # print("encode", Y.shape)
-        mat_encode = np.zeros((len(Y), classes))
-        for x, label in enumerate(Y.T[1]):
-            mat_encode[x, label] = 1
-        return pd.DataFrame(mat_encode)
+        return k.utils.to_categorical(Y[:, 1], classes)
 
     def fen_to_board(self, fen):
         pieces = {
@@ -94,3 +125,52 @@ class Tools():
                 continue
             samples[x+blank-slash][0] = pieces[c]
         return samples
+
+    def get_ConvNet(self, L):
+        # model = keras.model.load_model("Robo8000__conv")
+
+        model = Sequential()
+        model.add(Conv2D(filters=32, kernel_size=(3, 3), padding="same"))
+        model.add(BatchNormalization())
+        model.add(Activation("relu"))
+        model.add(MaxPool2D(pool_size=(2, 2)))
+
+        model.add(Conv2D(filters=64, kernel_size=(3, 3), padding="same"))
+        model.add(BatchNormalization())
+        model.add(Activation("relu"))
+        model.add(MaxPool2D(pool_size=(2, 2)))
+
+        # model.add(Dense(units=256))
+        # model.add(BatchNormalization())
+        # model.add(Activation("tanh"))
+
+        model.add(Conv2D(filters=128, kernel_size=(3, 3), padding="same"))
+        model.add(BatchNormalization())
+        model.add(Activation("relu"))
+        model.add(MaxPool2D(pool_size=(2, 2)))
+
+        #model.add(Conv2D(filters=256, kernel_size=(3, 3), padding="same"))
+        #model.add(BatchNormalization())
+        #model.add(Activation("tanh"))
+        #model.add(MaxPool2D(pool_size=(2, 2)))
+
+        model.add(Flatten())
+
+        model.add(Dense(units=320))
+        model.add(BatchNormalization())
+        model.add(Activation("relu"))
+
+        model.add(Dense(units=320))
+        model.add(BatchNormalization())
+        model.add(Activation("relu"))
+
+        model.add(Dense(units=500))
+        model.add(BatchNormalization())
+        model.add(Activation("relu"))
+
+        model.add(Dense(units=L))
+        model.add(BatchNormalization())
+        model.add(Activation("softmax"))
+
+        model.compile(optimizer=Adam(learning_rate=0.0001), loss='categorical_crossentropy', metrics=['accuracy'])
+        return model

@@ -14,40 +14,10 @@ epochs = sys.argv[1]
 
 tools = Tools()
 
+model = keras.models.load_model("Version_Control/Models/Robo7000_Conv")
+
 classes = tools.load("data/classes.pkl")
 L = len(classes)
-
-# model = keras.model.load_model("Robo6000")
-
-model = Sequential()
-model.add(Conv2D(filters=32, kernel_size=(3, 3), padding="same"))
-model.add(BatchNormalization())
-model.add(Activation("tanh"))
-model.add(MaxPool2D(pool_size=(2, 2)))
-
-model.add(Conv2D(filters=64, kernel_size=(3, 3), padding="same"))
-model.add(BatchNormalization())
-model.add(Activation("tanh"))
-model.add(MaxPool2D(pool_size=(2, 2)))
-
-# model.add(Dense(units=256))
-# model.add(BatchNormalization())
-# model.add(Activation("tanh"))
-
-model.add(Conv2D(filters=64, kernel_size=(3, 3), padding="same"))
-model.add(BatchNormalization())
-model.add(Activation("tanh"))
-model.add(MaxPool2D(pool_size=(2, 2)))
-
-model.add(Flatten())
-
-model.add(Dense(units=320))
-model.add(BatchNormalization())
-model.add(Activation("tanh"))
-
-model.add(Dense(units=L))
-model.add(BatchNormalization())
-model.add(Activation("softmax"))
 
 model.compile(optimizer=Adam(learning_rate=0.001), loss='categorical_crossentropy', metrics=['accuracy'])
 
@@ -64,8 +34,8 @@ for epoch in range(int(epochs)):
         # print(one_hot.shape)
         print("\t\t", end="")
         model.fit(
-            x=x_sample, y=one_hot, batch_size=2000,
+            x=x_sample, y=one_hot, batch_size=500,
             epochs=1, verbose=2, shuffle=True
             )
 
-model.save("Robo7000_Conv")
+model.save("Version_Control/Models/Robo7000_Conv")
