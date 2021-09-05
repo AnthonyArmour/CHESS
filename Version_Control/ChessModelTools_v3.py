@@ -28,6 +28,8 @@ class Tools():
 
     def __init__(self):
         self.engine = sql_engine
+        self.model = None
+        self.save_path = None
 
 
     def save(self, obj, filename):
@@ -127,8 +129,10 @@ class Tools():
             samples[x+blank-slash][0] = pieces[c]
         return samples
 
-    def get_ConvNet(self, L):
+    def get_ConvNet(self, L, save_path):
         # model = keras.model.load_model("Robo8000__conv")
+
+        self.save_path = save_path
 
         model = Sequential()
         model.add(Conv2D(filters=32, kernel_size=(7, 7), padding="same"))
@@ -153,11 +157,11 @@ class Tools():
 
         model.add(Flatten())
 
-        model.add(Dense(units=1024))
+        model.add(Dense(units=2048))
         model.add(BatchNormalization())
         model.add(Activation("tanh"))
 
-        model.add(Dense(units=1024))
+        model.add(Dense(units=2048))
         model.add(BatchNormalization())
         model.add(Activation("tanh"))
 
@@ -174,4 +178,9 @@ class Tools():
         model.add(Activation("softmax"))
 
         model.compile(optimizer=Adam(learning_rate=0.0001), loss='categorical_crossentropy', metrics=['accuracy'])
-        return model
+        self.model = model
+
+    def handler(self, signum, frame):
+            self.model.save(self.save_path)
+            print("Saved Model {}".format(self.save_path))
+            exit(1)
