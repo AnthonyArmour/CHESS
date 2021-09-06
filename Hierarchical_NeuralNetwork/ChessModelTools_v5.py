@@ -5,7 +5,7 @@ import sqlalchemy
 from ModelClass import Model
 from keras import backend
 from sqlalchemy import create_engine
-from tensorflow.python.keras.backend import dtype
+from tensorflow.python.keras.backend import concatenate, dtype
 import tensorflow.keras as k
 import tensorflow as tf
 from tensorflow import keras
@@ -38,20 +38,22 @@ class Tools():
         for i in range(197):
             print("Model {}:".format(i))
             model = self.load_Model(i)
-            self.train_RoboChess_SGD(model, x_samples, labels)
-            self.evaluate(model, x_samples, labels)
+            evalX, evalY = self.train_RoboChess_SGD(model, x_samples, labels)
+            self.evaluate(model, evalX, evalY)
             model.save("Hierarchical_Models_v1/NeuralNet_{}".format(i))
             del model
 
 
     def train_RoboChess_SGD(self, model, x_samples, labels, conv=True):
         if conv is True:
-            x_samples = (np.reshape(x_samples, (x_samples.shape[1], 8, 8, 1))).astype(np.float32)
+            x_samples = (np.reshape(x_samples, (1000, 8, 8, 1))).astype(np.float32)
         nums = np.zeros((1, 1))
         for i, label in enumerate(labels):
-            if i % 3 == 0:
+            if i % 10 == 0:
                 verbose = True
             if label in model.classes.keys():
+                print("Target Node")
+                verbose = True
                 nums[0][0] = model.classes[label]
                 alpha = 0.001
             else:
@@ -60,25 +62,33 @@ class Tools():
                     alpha = 0.0001
                 else:
                     continue
+            samp = (np.reshape(x_samples[i], (1, 8, 8, 1))).astype(np.float32)
             
 
             label = pd.DataFrame(nums, dtype=np.int)
             one_hot = self.one_hot_encode(label, len(model.classes))
             del label
+            if i == 0:
+                evaluateX = np.copy(x_samples)
+                evaluateY = np.copy(one_hot)
+            else:
+                evaluateX = np.concatenate((evaluateX, samp), axis=0)
+                evaluateY = np,concatenate((evaluateY, one_hot), axis=0)
             backend.set_value(model.model.optimizer.learning_rate, alpha)
             model.model.fit(
-                x=x_samples[i], y=one_hot, batch_size=1,
+                x=samp, y=one_hot, batch_size=1,
                 epochs=1, verbose=verbose
                 )
             verbose = False
+        return evaluateX, evaluateY
 
     def evaluate(self, model, x_samples, labels, conv=True):
-        if conv is True:
-            x_samples = (np.reshape(x_samples, (x_samples.shape[1], 8, 8, 1))).astype(np.float32)
-        labels = self.label_nums(labels)
-        one_hot = self.one_hot_encode(labels, len(model.classes))
-        del labels
-        loss, accuracy = model.model.evaluate(x=x_samples, y=one_hot, verbose=1)
+        # if conv is True:
+        #     x_samples = (np.reshape(x_samples, (x_samples.shape[1], 8, 8, 1))).astype(np.float32)
+        # labels = self.label_nums(labels, model.classes)
+        # one_hot = self.one_hot_encode(labels, len(model.classes))
+        # del labels
+        loss, accuracy = model.model.evaluate(x=x_samples, y=labels, verbose=1)
         print("{} Evaluation -- Loss: {} | Accuracy: {}".format(model.name, loss, accuracy))
 
     def one_hot_encode(self, Y, classes, valid=False):
@@ -94,7 +104,7 @@ class Tools():
 
     def load_Model(self, idx):
         model = Model(
-            k.model.load_model("Hierarchical_Models_v1/NeuralNet_{}".format(idx)),
+            k.models.load_model("Hierarchical_Models_v1/NeuralNet_{}".format(idx)),
             idx,
             self.get_class_split(idx)
             )
@@ -105,7 +115,7 @@ class Tools():
         models = []
         for x in range(batch, batch-10, -1):
             model = Model(
-                k.model.load_model("Hierarchical_Models_v1/NeuralNet_{}".format(x)),
+                k.models.load_model("Hierarchical_Models_v1/NeuralNet_{}".format(x)),
                 x,
                 self.get_class_split(x)
                 )
@@ -168,7 +178,7 @@ class Tools():
         initializer = k.initializers.HeNormal()
 
         model = Sequential()
-        model.add(k.Input(shape=(8, 8, 1)))
+        model.add(k.Input(shape=(1, 8, 8, 1)))
         model.add(Conv2D(filters=32, kernel_size=(7, 7), padding="same"))
         model.add(BatchNormalization())
         model.add(Activation("tanh"))
@@ -254,6 +264,9 @@ class Tools():
     def label_nums(self, labels, classes):
         nums = np.zeros((len(labels), 1))
         for x, label in enumerate(labels):
-            nums[x][0] = classes[label]
+            if label in classes.keys():
+                nums[x][0] = classes[label]
+            else:
+                nums[x][0] = classes["other"]
         # return nums.T
         return pd.DataFrame(nums, dtype=np.int)

@@ -16,8 +16,9 @@ import sys
 from signal import signal, SIGINT
 
 
-arguments = sys.argv
-max_batch = int(arguments[1])
+args = sys.argv
+max_batch = int(args[1])
+prop_size = int(args[2])
 path = os.getcwd()
 engine = chess.engine.SimpleEngine.popen_uci("stockfish_14_linux_x64_avx2/stockfish_14_x64_avx2")
 
@@ -30,9 +31,6 @@ brk, batches, broken = False, 0, False
 epoch = 0
 
 
-signal(SIGINT, tools.handler)
-
-
 while True:
     if brk is True:
         break
@@ -43,7 +41,7 @@ while True:
         for mv in board.legal_moves:
             if random.random() > 0.7:
                 continue
-            if x_samples is not None and x_samples.shape[1] == 50000:
+            if x_samples is not None and x_samples.shape[1] == prop_size:
                 print("\n\n")
                 tools.Train_Hierarchy(x_samples, labels)
                 del labels
@@ -79,7 +77,7 @@ while True:
             for mv2 in board.legal_moves:
                 if random.random() > 0.5:
                     continue
-                if x_samples is not None and x_samples.shape[1] == 50000:
+                if x_samples is not None and x_samples.shape[1] == prop_size:
                     print("\n\n")
                     tools.Train_Hierarchy(x_samples, labels)
                     del x_samples
