@@ -7,7 +7,7 @@ from tensorflow.keras.layers import Activation, Dense, BatchNormalization, Conv2
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.regularizers import L2
 from tensorflow.keras.metrics import categorical_crossentropy
-from ChessModelTools_v5 import Tools
+from ChessModelTools_v6_ResNet import Tools
 import random
 import numpy as np
 import pandas as pd
