@@ -5,12 +5,12 @@ import sqlalchemy
 from ModelClass import Model
 from keras import backend
 from sqlalchemy import create_engine
-from tensorflow.python.keras.backend import concatenate, dtype
+from tensorflow.python.keras.backend import concatenate, dtype, one_hot
 import tensorflow.keras as k
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Activation, Dense, BatchNormalization, Conv2D, MaxPool2D, Flatten
+from tensorflow.keras.layers import Activation, Dense, BatchNormalization, Conv2D, MaxPool2D, Flatten, LayerNormalization
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.regularizers import L2
 from tensorflow.keras.metrics import categorical_crossentropy
@@ -34,62 +34,102 @@ class Tools():
         self.save_path = None
 
 
+    def train_SingleNet(self, model, x_samples, labels):
+        evalX, evalY, target, other = self.train_RoboChess_SGD(model, x_samples, labels)
+        print(evalX.shape)
+        self.evaluate(model, evalX, evalY, target, other)
+
+
     def Train_Hierarchy(self, x_samples, labels):
         for i in range(197):
-            print("Model {}:".format(i))
+            print("\n\nModel {}:".format(i))
             model = self.load_Model(i)
-            evalX, evalY = self.train_RoboChess_SGD(model, x_samples, labels)
-            self.evaluate(model, evalX, evalY)
-            model.save("Hierarchical_Models_v1/NeuralNet_{}".format(i))
+            evalX, evalY, target, other = self.train_RoboChess_SGD(model, x_samples, labels)
+            self.evaluate(model, evalX, evalY, target, other)
+            model.model.save("Hierarchical_Models_v1/NeuralNet_{}".format(i))
             del model
 
 
     def train_RoboChess_SGD(self, model, x_samples, labels, conv=True):
-        if conv is True:
-            x_samples = (np.reshape(x_samples, (1000, 8, 8, 1))).astype(np.float32)
-        nums = np.zeros((1, 1))
+        evaluateX, evaluateY, verbose = None, None, False
+        samp , nums = None, None
+        target, other = 0, 0
+        prnt = 0
+        # print(x_samples[0])
+#        if conv is True:
+#            x_samples = (np.reshape(x_samples, (50000, 8, 8, 1))).astype(np.float32)
+        # nums = np.zeros((1,))
+        # nums = np.zeros((1, 1))
         for i, label in enumerate(labels):
-            if i % 10 == 0:
-                verbose = True
+            # if i % 25000 == 0:
+            #     verbose = True
             if label in model.classes.keys():
-                print("Target Node")
-                verbose = True
-                nums[0][0] = model.classes[label]
-                alpha = 0.001
+                # nums[0][0] = model.classes[label]
+                if nums is None:
+                    nums = np.zeros((1,))
+                    nums[0] = model.classes[label]
+                else:
+                    nums = np.concatenate((nums, np.array([model.classes[label]])), axis=0)
+                alpha = 0.000001
+                target += 1
             else:
-                if random.random() > 0.95:
-                    nums[0][0] = model.classes["other"]
-                    alpha = 0.0001
+                if random.random() > 0.991 or target > other:
+                    # nums[0][0] = model.classes["other"]
+                    if nums is None:
+                        nums = np.zeros((1,))
+                        nums[0] = model.classes["other"]
+                    else:
+                        nums = np.concatenate((nums, np.array([model.classes["other"]])), axis=0)
+                        # nums[0] = model.classes["other"]
+                        alpha = 0.000001
+                        other += 1
                 else:
                     continue
-            samp = (np.reshape(x_samples[i], (1, 8, 8, 1))).astype(np.float32)
+            # if prnt == 0:
+            #     print(x_samples)
+            #     prnt += 1
+            # samp = (np.reshape(x_samples[i], (1, 8, 8, 1))).astype(np.float32)
+            if samp is None:
+                samp = (np.reshape(x_samples[i], (1, 8, 8, 1))).astype(np.float32)
+            else:
+                cat = (np.reshape(x_samples[i], (1, 8, 8, 1))).astype(np.float32)
+                samp = np.concatenate((samp, cat), axis=0)
+            # samp = (np.reshape(x_samples[:, :, :, i], (8, 8, 1, 1))).astype(np.float32)
+            # print(samp, "\n")
+            # exit(0)
+            # if prnt == 0:
+            #     print(samp)
+            #     prnt += 1
             
 
             label = pd.DataFrame(nums, dtype=np.int)
             one_hot = self.one_hot_encode(label, len(model.classes))
             del label
-            if i == 0:
-                evaluateX = np.copy(x_samples)
+            if evaluateX is None:
+                evaluateX = np.copy(samp)
                 evaluateY = np.copy(one_hot)
             else:
                 evaluateX = np.concatenate((evaluateX, samp), axis=0)
-                evaluateY = np,concatenate((evaluateY, one_hot), axis=0)
-            backend.set_value(model.model.optimizer.learning_rate, alpha)
+                evaluateY = np.concatenate((evaluateY, one_hot), axis=0)
+            # backend.set_value(model.model.optimizer.learning_rate, alpha)
             model.model.fit(
-                x=samp, y=one_hot, batch_size=1,
+                x=samp, y=one_hot, batch_size=20,
                 epochs=1, verbose=verbose
                 )
             verbose = False
-        return evaluateX, evaluateY
+        return evaluateX, evaluateY, target, other
 
-    def evaluate(self, model, x_samples, labels, conv=True):
+
+    def evaluate(self, model, x_samples, labels, target, other, conv=True):
         # if conv is True:
         #     x_samples = (np.reshape(x_samples, (x_samples.shape[1], 8, 8, 1))).astype(np.float32)
         # labels = self.label_nums(labels, model.classes)
         # one_hot = self.one_hot_encode(labels, len(model.classes))
         # del labels
         loss, accuracy = model.model.evaluate(x=x_samples, y=labels, verbose=1)
-        print("{} Evaluation -- Loss: {} | Accuracy: {}".format(model.name, loss, accuracy))
+        print("{} Evaluation -- Loss: {} | Accuracy: {} | Target Cnt: {} | Other Cnt: {}".format(model.name, loss, accuracy, target, other))
+        with open("log_5.txt", "a") as fp:
+            fp.write("{} Evaluation -- Loss: {} | Accuracy: {}| Target Cnt: {} | Other Cnt: {}\n".format(model.name, loss, accuracy, target, other))
 
     def one_hot_encode(self, Y, classes, valid=False):
         """
@@ -107,6 +147,23 @@ class Tools():
             k.models.load_model("Hierarchical_Models_v1/NeuralNet_{}".format(idx)),
             idx,
             self.get_class_split(idx)
+            )
+        return model
+
+    def load_TestModel(self):
+        model = Model(
+            k.models.load_model("Hierarchical_Models_v1/NeuralNet_test_custom_filters"),
+            169,
+            self.get_class_split(169)
+            )
+        return model
+
+    def create_TestModel(self, filters=None):
+        init = self.get_ConvNet(11, filters)
+        model = Model(
+            init,
+            169,
+            self.get_class_split(169)
             )
         return model
 
@@ -173,32 +230,281 @@ class Tools():
             del model
 
 
-    def get_ConvNet(self, L):
+    def my_filter(self, shape, dtype='float32'):
+
+
+        f = np.array([
+                [[[0]], [[0]], [[0]], [[0]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[2]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[2]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[3]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[2]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[2]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[0]], [[0]], [[0]], [[0]]]
+            ])
+        f2 = np.array([
+                [[[0]], [[0]], [[0]], [[2]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[2]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[2]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[3]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[2]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[2]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[2]], [[0]], [[0]], [[0]]]
+            ])
+        f = np.concatenate((f, f2), axis=3)
+        f2 = np.array([
+                [[[0]], [[0]], [[0]], [[0]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[0]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[2]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[3]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[2]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[0]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[0]], [[0]], [[0]], [[0]]]
+            ])
+        f = np.concatenate((f, f2), axis=3)
+
+
+
+        f2 = np.array([
+                [[[0]], [[0]], [[0]], [[0]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[0]], [[0]], [[2]], [[0]]],
+                [[[0]], [[0]], [[0]], [[0]], [[2]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[3]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[2]], [[0]], [[0]], [[0]], [[0]]],
+                [[[0]], [[2]], [[0]], [[0]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[0]], [[0]], [[0]], [[0]]]
+            ])
+        f = np.concatenate((f, f2), axis=3)
+        f2 = np.array([
+                [[[0]], [[0]], [[0]], [[0]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[0]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[0]], [[2]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[3]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[2]], [[0]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[0]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[0]], [[0]], [[0]], [[0]]]
+            ])
+        f = np.concatenate((f, f2), axis=3)
+        f2 = np.array([
+                [[[0]], [[0]], [[0]], [[0]], [[0]], [[0]], [[2]]],
+                [[[0]], [[0]], [[0]], [[0]], [[0]], [[2]], [[0]]],
+                [[[0]], [[0]], [[0]], [[0]], [[2]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[3]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[2]], [[0]], [[0]], [[0]], [[0]]],
+                [[[0]], [[2]], [[0]], [[0]], [[0]], [[0]], [[0]]],
+                [[[2]], [[0]], [[0]], [[0]], [[0]], [[0]], [[0]]]
+            ])
+        f = np.concatenate((f, f2), axis=3)
+
+
+
+
+
+        f2 = np.array([
+                [[[0]], [[0]], [[0]], [[0]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[0]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[0]], [[0]], [[0]], [[0]]],
+                [[[0]], [[2]], [[2]], [[3]], [[2]], [[2]], [[0]]],
+                [[[0]], [[0]], [[0]], [[0]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[0]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[0]], [[0]], [[0]], [[0]]]
+            ])
+        f = np.concatenate((f, f2), axis=3)
+        f2 = np.array([
+                [[[0]], [[0]], [[0]], [[0]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[0]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[0]], [[0]], [[0]], [[0]]],
+                [[[2]], [[2]], [[2]], [[3]], [[2]], [[2]], [[2]]],
+                [[[0]], [[0]], [[0]], [[0]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[0]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[0]], [[0]], [[0]], [[0]]]
+            ])
+        f = np.concatenate((f, f2), axis=3)
+        f2 = np.array([
+                [[[0]], [[0]], [[0]], [[0]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[0]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[0]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[2]], [[3]], [[2]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[0]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[0]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[0]], [[0]], [[0]], [[0]]]
+            ])
+        f = np.concatenate((f, f2), axis=3)
+
+
+
+
+        f2 = np.array([
+                [[[0]], [[0]], [[0]], [[0]], [[0]], [[0]], [[0]]],
+                [[[0]], [[2]], [[0]], [[0]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[2]], [[0]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[3]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[0]], [[2]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[0]], [[0]], [[2]], [[0]]],
+                [[[0]], [[0]], [[0]], [[0]], [[0]], [[0]], [[0]]]
+            ])
+        f = np.concatenate((f, f2), axis=3)
+        f2 = np.array([
+                [[[2]], [[0]], [[0]], [[0]], [[0]], [[0]], [[0]]],
+                [[[0]], [[2]], [[0]], [[0]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[2]], [[0]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[3]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[0]], [[2]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[0]], [[0]], [[2]], [[0]]],
+                [[[0]], [[0]], [[0]], [[0]], [[0]], [[0]], [[2]]]
+            ])
+        f = np.concatenate((f, f2), axis=3)
+        f2 = np.array([
+                [[[0]], [[0]], [[0]], [[0]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[0]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[2]], [[0]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[3]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[0]], [[2]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[0]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[0]], [[0]], [[0]], [[0]]]
+            ])
+        f = np.concatenate((f, f2), axis=3)
+
+
+
+
+
+        f2 = np.array([
+                [[[0]], [[0]], [[0]], [[0]], [[0]], [[0]], [[0]]],
+                [[[0]], [[0]], [[2]], [[0]], [[2]], [[0]], [[0]]],
+                [[[0]], [[2]], [[0]], [[0]], [[0]], [[2]], [[0]]],
+                [[[0]], [[0]], [[0]], [[3]], [[0]], [[0]], [[0]]],
+                [[[0]], [[2]], [[0]], [[0]], [[0]], [[2]], [[0]]],
+                [[[0]], [[0]], [[2]], [[0]], [[2]], [[0]], [[0]]],
+                [[[0]], [[0]], [[0]], [[0]], [[0]], [[0]], [[0]]]
+            ])
+        f = np.concatenate((f, f2), axis=3)
+
+
+
+
+
+
+
+        # f2 = np.array([
+        #         [[[0]], [[0]], [[0]], [[0]], [[0]]],
+        #         [[[0]], [[0]], [[0]], [[0]], [[0]]],
+        #         [[[0]], [[2]], [[3]], [[2]], [[0]]],
+        #         [[[0]], [[0]], [[0]], [[0]], [[0]]],
+        #         [[[0]], [[0]], [[0]], [[0]], [[0]]]
+        #     ])
+        # f = np.concatenate((f, f2), axis=3)
+        # f2 = np.array([
+        #         [[[0]], [[0]], [[0]], [[0]], [[0]]],
+        #         [[[0]], [[0]], [[0]], [[0]], [[0]]],
+        #         [[[2]], [[2]], [[3]], [[2]], [[2]]],
+        #         [[[0]], [[0]], [[0]], [[0]], [[0]]],
+        #         [[[0]], [[0]], [[0]], [[0]], [[0]]]
+        #     ])
+        # f = np.concatenate((f, f2), axis=3)
+        # f2 = np.array([
+        #         [[[0]], [[0]], [[0]], [[0]], [[0]]],
+        #         [[[0]], [[0]], [[0]], [[2]], [[0]]],
+        #         [[[0]], [[0]], [[3]], [[0]], [[0]]],
+        #         [[[0]], [[2]], [[0]], [[0]], [[0]]],
+        #         [[[0]], [[0]], [[0]], [[0]], [[0]]]
+        #     ])
+        # f = np.concatenate((f, f2), axis=3)
+        # f2 = np.array([
+        #         [[[0]], [[0]], [[0]], [[0]], [[2]]],
+        #         [[[0]], [[0]], [[0]], [[2]], [[0]]],
+        #         [[[0]], [[0]], [[3]], [[0]], [[0]]],
+        #         [[[0]], [[2]], [[0]], [[0]], [[0]]],
+        #         [[[2]], [[0]], [[0]], [[0]], [[0]]]
+        #     ])
+        # f = np.concatenate((f, f2), axis=3)
+        # f2 = np.array([
+        #         [[[0]], [[2]], [[0]], [[2]], [[0]]],
+        #         [[[2]], [[0]], [[0]], [[0]], [[2]]],
+        #         [[[0]], [[0]], [[3]], [[0]], [[0]]],
+        #         [[[2]], [[0]], [[0]], [[0]], [[2]]],
+        #         [[[0]], [[2]], [[0]], [[2]], [[0]]]
+        #     ])
+        # f = np.concatenate((f, f2), axis=3)
+
+        return tf.Variable(f, dtype=dtype, trainable=False)
+
+
+    def get_ConvNet(self, L, filters=None):
         # model = keras.model.load_model("Robo8000__conv")
-        initializer = k.initializers.HeNormal()
+        # initializer = k.initializers.HeNormal()
+        # initializer = k.initializers.GlorotNormal()
+        # initializer = k.initializers.GlorotUniform()
+        # initializer = k.initializers.HeUniform()
+        initializer = k.initializers.Orthogonal()
 
         model = Sequential()
-        model.add(k.Input(shape=(1, 8, 8, 1)))
-        model.add(Conv2D(filters=32, kernel_size=(7, 7), padding="same"))
+        # model.add(LayerNormalization())
         model.add(BatchNormalization())
-        model.add(Activation("tanh"))
-        model.add(MaxPool2D(pool_size=(2, 2)))
+
+        if filters == "custom":
+            model.add(k.Input(shape=(8, 8, 1)))
+            model.add(Conv2D(filters=13, kernel_size=(7, 7), padding="same", kernel_initializer=self.my_filter))
+            model.add(BatchNormalization())
+            model.add(Activation("sigmoid"))
+            # model.add(LeakyRsigmoid(alpha=0.25))
+        else:
+            model.add(k.Input(shape=(8, 8, 1)))
+
+
+        # model.add(k.Input(shape=(8, 8, 1)))
+        model.add(Conv2D(filters=32, kernel_size=(5, 5), padding="same"))
+        model.add(BatchNormalization())
+        model.add(Activation("sigmoid"))
+
+        model.add(Conv2D(filters=64, kernel_size=(5, 5), padding="same"))
+        model.add(BatchNormalization())
+        model.add(Activation("sigmoid"))
+
+        model.add(Conv2D(filters=128, kernel_size=(5, 5), padding="same"))
+        model.add(BatchNormalization())
+        model.add(Activation("sigmoid"))
+        # model.add(LeakyRsigmoid(alpha=0.25))
 
         model.add(Flatten())
 
-        model.add(Dense(units=256, kernel_initializer=initializer))
-        model.add(BatchNormalization())
-        model.add(Activation("tanh"))
+        # model = keras.model.load_model("Robo8000__conv")
+        initializer = k.initializers.HeNormal()
+        # initializer = k.initializers.GlorotNormal()
+        # initializer = k.initializers.GlorotUniform()
+        # initializer = k.initializers.HeUniform()
 
-        model.add(Dense(units=256, kernel_initializer=initializer))
+        model.add(Dense(units=4096, kernel_initializer=initializer))
         model.add(BatchNormalization())
-        model.add(Activation("tanh"))
+        model.add(Activation("sigmoid"))
+        # model.add(LeakyRsigmoid(alpha=0.25))
+
+        model.add(Dense(units=4096, kernel_initializer=initializer))
+        model.add(BatchNormalization())
+        model.add(Activation("sigmoid"))
+        # model.add(LeakyRsigmoid(alpha=0.25))
+
+        model.add(Dense(units=4096, kernel_initializer=initializer))
+        model.add(BatchNormalization())
+        model.add(Activation("sigmoid"))
+
+        model.add(Dense(units=4096, kernel_initializer=initializer))
+        model.add(BatchNormalization())
+        model.add(Activation("sigmoid"))
+        # model.add(LeakyRsigmoid(alpha=0.25))
 
         model.add(Dense(units=L))
         model.add(BatchNormalization())
         model.add(Activation("softmax"))
 
-        model.compile(optimizer=Adam(learning_rate=0.0001), loss='categorical_crossentropy', metrics=['accuracy'])
+        # lr_schedule = k.optimizers.schedules.ExponentialDecay(
+        #     initial_learning_rate=0.000000001,
+        #     decay_steps=10000,
+        #     decay_rate=0.9)
+        # Stochastic = k.optimizers.SGD(learning_rate=0.0001)
+
+        # model.compile(optimizer=Stochastic, loss='categorical_crossentropy', metrics=['accuracy'])
+        model.compile(optimizer=Adam(learning_rate=0.00001), loss='categorical_crossentropy', metrics=['accuracy'])
         return model
 
     # def handler(self, signum, frame):
@@ -243,12 +549,17 @@ class Tools():
         print("Saved!")
 
     def fen_to_board(self, fen):
+        # pieces = {
+        #     "p": 5, "P": -5, "b": 15, "B": -15, "n": 25, "N": -25,
+        #     "r": 35, "R": -35, "q": 45, "Q": -45, "k": 55, "K": -55
+        # }
         pieces = {
-            "p": 5, "P": -5, "b": 15, "B": -15, "n": 25, "N": -25,
-            "r": 35, "R": -35, "q": 45, "Q": -45, "k": 55, "K": -55
+            "p": 5, "P": 105, "b": 15, "B": 115, "n": 25, "N": 125,
+            "r": 35, "R": 135, "q": 45, "Q": 145, "k": 55, "K": 155
         }
         blank, slash = 0, 0
-        samples = np.ones((64, 1))
+        samples = np.ones((1, 64))
+        # samples = np.ones((64, 1))
         for x, c in enumerate(fen):
             if c == " ":
                 break
@@ -258,7 +569,8 @@ class Tools():
             if c == "/":
                 slash += 1
                 continue
-            samples[x+blank-slash][0] = pieces[c]
+            samples[0][x+blank-slash] = pieces[c]
+            # samples[x+blank-slash][0] = pieces[c]
         return samples
 
     def label_nums(self, labels, classes):
