@@ -2,7 +2,7 @@ import numpy as np
 import pickle
 import pandas as pd
 import sqlalchemy
-from ModelClass import Model as MyModel
+from ModelClass import Model
 from keras import backend
 from sqlalchemy import create_engine
 from Filters import my_filter
@@ -10,8 +10,8 @@ from tensorflow.python.keras.backend import concatenate, dtype, one_hot
 import tensorflow.keras as k
 import tensorflow as tf
 from tensorflow import keras
-from tensorflow.keras.models import Sequential, Model
-from tensorflow.keras.layers import Activation, Dense, BatchNormalization, Conv2D, MaxPool2D, Flatten, LayerNormalization, add
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Activation, Dense, BatchNormalization, Conv2D, MaxPool2D, Flatten, LayerNormalization
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.regularizers import L2
 from tensorflow.keras.metrics import categorical_crossentropy
@@ -71,12 +71,13 @@ class Tools():
                 #     nums[0] = model.classes[label]
                 # else:
                 #     nums = np.concatenate((nums, np.array([model.classes[label]])), axis=0)
-                alpha = 0.000001
+                alpha = 0.0001
                 target += 1
             else:
                 if random.random() > 0.991 or target > other:
                     nums[0][0] = model.classes["other"]
                     other += 1
+                    alpha = 0.00001
                     # if nums is None:
                     #     nums = np.zeros((1,))
                     #     nums[0] = model.classes["other"]
@@ -113,7 +114,7 @@ class Tools():
             else:
                 evaluateX = np.concatenate((evaluateX, samp), axis=0)
                 evaluateY = np.concatenate((evaluateY, one_hot), axis=0)
-            # backend.set_value(model.model.optimizer.learning_rate, alpha)
+            backend.set_value(model.model.optimizer.learning_rate, alpha)
             model.model.fit(
                 x=samp, y=one_hot, batch_size=1,
                 epochs=1, verbose=verbose
@@ -156,7 +157,7 @@ class Tools():
 
     def load_TestModel(self):
         model = Model(
-            k.models.load_model("Hierarchical_Models_v1/NeuralNet_test_custom_filters"),
+            k.models.load_model("Hierarchical_Models_v1/NeuralNet_test_custom_filters2"),
             169,
             self.get_class_split(169)
             )
@@ -164,7 +165,7 @@ class Tools():
 
     def create_TestModel(self, filters=None):
         init = self.get_ConvNet(11, filters)
-        model = MyModel(
+        model = Model(
             init,
             169,
             self.get_class_split(169)
@@ -175,14 +176,14 @@ class Tools():
     def load_Models_batch(self, batch, last=False):
         models = []
         for x in range(batch, batch-10, -1):
-            model = MyModel(
+            model = Model(
                 k.models.load_model("Hierarchical_Models_v1/NeuralNet_{}".format(x)),
                 x,
                 self.get_class_split(x)
                 )
             models.append(model)
         if last is True:
-            model = MyModel(
+            model = Model(
                 k.model.load_model("Hierarchical_Models_v1/NeuralNet_196"),
                 196,
                 self.get_class_split(196)
@@ -235,96 +236,101 @@ class Tools():
 
     def get_ConvNet(self, L, filters=None):
         # model = keras.model.load_model("Robo8000__conv")
-        # initializer = k.initializers.HeNormal()
-        # initializer = k.initializers.GlorotNormal()
-        # initializer = k.initializers.GlorotUniform()
-        # initializer = k.initializers.HeUniform()
-        initializer = k.initializers.Orthogonal()
-
-        # model.add(LayerNormalization())
-        input = k.Input(shape=(8, 8, 1))
-        norm0 = BatchNormalization()(input)
-
-        if filters == "custom":
-            # model.add(k.Input(shape=(8, 8, 1)))
-            b1_conv1 = Conv2D(filters=13, kernel_size=(7, 7), padding="same", kernel_initializer=my_filter)(norm0)
-            b1_norm1 = BatchNormalization()(b1_conv1)
-            active1 = Activation("sigmoid")(b1_norm1)
-
-        b1_conv2 = Conv2D(filters=32, kernel_size=(5, 5), padding="same")(active1)
-        b1_norm2 = BatchNormalization()(b1_conv2)
-        b1_out = Activation("sigmoid")(b1_norm2)
-
-
-
-        b2_conv1 = Conv2D(filters=32, kernel_size=(5, 5), padding="same")(b1_out)
-        b2_norm1 = BatchNormalization()(b2_conv1)
-        b2_active1 = Activation("sigmoid")(b2_norm1)
-
-        b2_add = add([b1_out, b2_active1])
-
-        b2_conv2 = Conv2D(filters=64, kernel_size=(5, 5), padding="same")(b2_add)
-        b2_norm2 = BatchNormalization()(b2_conv2)
-        b2_out = Activation("sigmoid")(b2_norm2)
-
-
-
-
-        flat = Flatten()(b2_out)
-
-        # model = keras.model.load_model("Robo8000__conv")
         initializer = k.initializers.HeNormal()
         # initializer = k.initializers.GlorotNormal()
         # initializer = k.initializers.GlorotUniform()
         # initializer = k.initializers.HeUniform()
+        # initializer = k.initializers.Orthogonal()
 
-        b1_dense1 = Dense(units=4096, kernel_initializer=initializer)(flat)
-        b1_dense_norm1 = BatchNormalization()(b1_dense1)
-        b1_dense_active1 = Activation("sigmoid")(b1_dense_norm1)
+        model = Sequential()
+        # model.add(LayerNormalization())
+        model.add(BatchNormalization())
 
-        b3_add = add([flat, b1_dense_active1])
+        act = "sigmoid"
+        print(act)
 
-        b1_dense2 = Dense(units=4096, kernel_initializer=initializer)(b3_add)
-        b1_dense_norm2 = BatchNormalization()(b1_dense2)
-        b1_dense_out2 = Activation("sigmoid")(b1_dense_norm2)
+        if filters == "custom":
+            model.add(k.Input(shape=(8, 8, 1)))
+            model.add(Conv2D(filters=13, kernel_size=(7, 7), padding="same", kernel_initializer=my_filter))
+            model.add(BatchNormalization())
+            model.add(Activation(act))
+            # model.add(BatchNormalization())
+            # model.add(LeakyRsigmoid(alpha=0.25))
+        else:
+            model.add(k.Input(shape=(8, 8, 1)))
 
 
-        b2_dense1 = Dense(units=4096, kernel_initializer=initializer)(b1_dense_out2)
-        b2_dense1_norm2 = BatchNormalization()(b2_dense1)
-        b2_dense1_active2 = Activation("sigmoid")(b2_dense1_norm2)
+        # model.add(k.Input(shape=(8, 8, 1)))
+        model.add(Conv2D(filters=32, kernel_size=(5, 5), padding="same"))
+        model.add(BatchNormalization())
+        model.add(Activation(act))
+        # model.add(BatchNormalization())
 
-        b4_add = add([b1_dense_out2, b2_dense1_active2])
+        model.add(Conv2D(filters=64, kernel_size=(3, 3), padding="same"))
+        model.add(BatchNormalization())
+        model.add(Activation(act))
+        # model.add(BatchNormalization())
 
-        b3_dense = Dense(units=4096, kernel_initializer=initializer)(b4_add)
-        b3_norm1 = BatchNormalization()(b3_dense)
-        b3_out = Activation("sigmoid")(b3_norm1)
-
-        b3_dense2 = Dense(units=4096, kernel_initializer=initializer)(b3_out)
-        b3_norm2 = BatchNormalization()(b3_dense2)
-        b3_active1 = Activation("sigmoid")(b3_norm2)
-
-        b5_add = add([b3_out, b3_active1])
+        model.add(Conv2D(filters=128, kernel_size=(3, 3), padding="same"))
+        model.add(BatchNormalization())
+        model.add(Activation(act))
+        # model.add(BatchNormalization())
         # model.add(LeakyRsigmoid(alpha=0.25))
 
-        final_dense = Dense(units=L)(b5_add)
-        # final_norm = BatchNormalization()
-        softmax = Activation("softmax")(final_dense)
+        model.add(Flatten())
 
+        # model = keras.model.load_model("Robo8000__conv")
+        # initializer = k.initializers.HeNormal()
+        # initializer = k.initializers.GlorotNormal()
+        # initializer = k.initializers.GlorotUniform()
+        # initializer = k.initializers.HeUniform()
 
-        model = Model(input, softmax)
+        model.add(Dense(units=4096, kernel_initializer=initializer))
+        model.add(BatchNormalization())
+        model.add(Activation(act))
+        # model.add(BatchNormalization())
+        # model.add(LeakyRsigmoid(alpha=0.25))
 
+        model.add(Dense(units=4096, kernel_initializer=initializer))
+        model.add(BatchNormalization())
+        model.add(Activation(act))
+        # model.add(BatchNormalization())
+        # model.add(LeakyRsigmoid(alpha=0.25))
+
+        model.add(Dense(units=4096, kernel_initializer=initializer))
+        model.add(BatchNormalization())
+        model.add(Activation(act))
+        # model.add(BatchNormalization())
+
+        model.add(Dense(units=4096, kernel_initializer=initializer))
+        model.add(BatchNormalization())
+        model.add(Activation(act))
+        # model.add(BatchNormalization())
+
+        model.add(Dense(units=4096, kernel_initializer=initializer))
+        model.add(BatchNormalization())
+        model.add(Activation(act))
+        # model.add(BatchNormalization())
+        # model.add(LeakyRsigmoid(alpha=0.25))
+
+        model.add(Dense(units=L))
+        # model.add(BatchNormalization())
+        model.add(Activation("softmax"))
 
         # lr_schedule = k.optimizers.schedules.ExponentialDecay(
         #     initial_learning_rate=0.000000001,
         #     decay_steps=10000,
         #     decay_rate=0.9)
-        Stochastic = k.optimizers.SGD(learning_rate=0.00001, momentum=0.6)
+        Stochastic = k.optimizers.SGD(learning_rate=0.00001)
 
         model.compile(optimizer=Stochastic, loss='categorical_crossentropy', metrics=['accuracy'])
         # model.compile(optimizer=Adam(learning_rate=0.00001), loss='categorical_crossentropy', metrics=['accuracy'])
         return model
 
-
+    # def handler(self, signum, frame):
+    #         self.model.save(self.save_path)
+    #         print("Saved Model {}".format(self.save_path))
+    #         exit(1)
 
     def save(self, obj, filename):
         """Saves pickled object to .pkl file"""
@@ -363,14 +369,14 @@ class Tools():
         print("Saved!")
 
     def fen_to_board(self, fen):
-        # pieces = {
-        #     "p": 5, "P": -5, "b": 15, "B": -15, "n": 25, "N": -25,
-        #     "r": 35, "R": -35, "q": 45, "Q": -45, "k": 55, "K": -55
-        # }
         pieces = {
-            "p": 5, "P": 105, "b": 15, "B": 115, "n": 25, "N": 125,
-            "r": 35, "R": 135, "q": 45, "Q": 145, "k": 55, "K": 155
+            "p": 5, "P": -5, "b": 15, "B": -15, "n": 25, "N": -25,
+            "r": 35, "R": -35, "q": 45, "Q": -45, "k": 55, "K": -55
         }
+        # pieces = {
+        #     "p": 5, "P": 105, "b": 15, "B": 115, "n": 25, "N": 125,
+        #     "r": 35, "R": 135, "q": 45, "Q": 145, "k": 55, "K": 155
+        # }
         blank, slash = 0, 0
         samples = np.ones((1, 64))
         # samples = np.ones((64, 1))

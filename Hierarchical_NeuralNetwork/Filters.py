@@ -199,4 +199,4 @@ def my_filter(shape, dtype='float32'):
     #     ])
     # f = np.concatenate((f, f2), axis=3)
 
-    return tf.Variable(f, dtype=dtype, trainable=False)
+    return tf.Variable(f, dtype=dtype)

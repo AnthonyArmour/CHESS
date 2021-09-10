@@ -7,7 +7,7 @@ from tensorflow.keras.layers import Activation, Dense, BatchNormalization, Conv2
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.regularizers import L2
 from tensorflow.keras.metrics import categorical_crossentropy
-from ChessModelTools_v5 import Tools
+from ChessModelTools_v6_ResNet import Tools
 import random
 import numpy as np
 import pandas as pd
@@ -47,7 +47,7 @@ while True:
     board = chess.Board() #give whatever starting position here
     while not board.is_game_over():
         for mv in board.legal_moves:
-            if random.random() > 0.7:
+            if random.random() > 0.1:
                 continue
             if x_samples is not None and x_samples.shape[0] == prop_size:
                 print("\n\n")
@@ -91,7 +91,7 @@ while True:
             board.push(result.move)
 
             for mv2 in board.legal_moves:
-                if random.random() > 0.5:
+                if random.random() > 0.1:
                     continue
                 if x_samples is not None and x_samples.shape[0] == prop_size:
                     print("\n\n")
