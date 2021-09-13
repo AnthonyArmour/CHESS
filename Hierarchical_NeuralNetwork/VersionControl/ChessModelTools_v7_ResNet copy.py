@@ -13,9 +13,6 @@ from tensorflow.keras.models import Sequential, Model
 from tensorflow.keras.layers import Activation, Dense, BatchNormalization, Conv2D, MaxPool2D, Flatten, LayerNormalization, add
 from tensorflow.keras.optimizers import Adam
 import random
-import shutil
-from os.path import exists
-from os import remove
 
 MYSQL_USER = "ant"
 MYSQL_PWD = "root"
@@ -75,15 +72,13 @@ class Tools():
             # backend.set_value(model.model.optimizer.learning_rate, alpha)
         # print("| Target: {} | Other: {} |".format(target, other))
         hist = model.model.fit(
-            x=evaluateX, y=evaluateY, batch_size=32,
+            x=evaluateX, y=evaluateY, batch_size=64,
             epochs=epochs, verbose=verbose, shuffle=True
             )
         loss = hist.history['loss']
         accuracy = hist.history['accuracy']
-        model.LossAcc["target"] = target
-        model.LossAcc["other"] = other
-        model.LossAcc["loss"] = np.append(model.LossAcc["loss"], loss)
-        model.LossAcc["accuracy"] = np.append(model.LossAcc["accuracy"], accuracy)
+        model.loss = np.append(model.loss, loss)
+        model.accuracy = np.append(model.accuracy, accuracy)
         verbose = False
         return evaluateX, evaluateY, target, other
 
@@ -258,16 +253,11 @@ class Tools():
             )
         return model
 
-    def create_TestModel(self, network, filters=None, learning_rate=0.000001, name=None):
+    def create_TestModel(self, network, filters=None, learning_rate=0.00001, name=None):
         if network == 196:
             neurons = 9
         else:
             neurons = 11
-        if exists("Hierarchical_Models_v1/{}".format(name)) is True:
-            shutil.rmtree("Hierarchical_Models_v1/{}".format(name))
-            remove(name + "_LossAcc.pkl")
-            remove("TestNet_{}.png".format(network))
-
         init = self.get_ConvNet(11, filters, learning_rate)
         model = MyModel(
             init,
@@ -275,8 +265,6 @@ class Tools():
             self.get_class_split(network),
             name=name
             )
-        with open("Hierarchical_Models_v1/{}/Log.txt".format(name), "w") as fh:
-            fh.write("Network_{}\nlearning rate: {}")
         return model
 
     def get_class_split(self, idx):
@@ -311,11 +299,11 @@ class Tools():
         print(len(classes), len(invert_classes))
 
     def get_ConvNet(self, L, filters=None, learning_rate=0.00001):
-        initializer = k.initializers.HeNormal()
+        # initializer = k.initializers.HeNormal()
         # initializer = k.initializers.GlorotNormal()
         # initializer = k.initializers.GlorotUniform()
         # initializer = k.initializers.HeUniform()
-        # initializer = k.initializers.Orthogonal()
+        initializer = k.initializers.Orthogonal()
         input = k.Input(shape=(8, 8, 1))
         norm0 = BatchNormalization()(input)
 
@@ -329,41 +317,13 @@ class Tools():
         b1_out = Activation("sigmoid")(b1_norm2)
 
 
-        b2_conv1 = Conv2D(filters=32, kernel_size=(7, 7), padding="same")(b1_out)
+        b2_conv1 = Conv2D(filters=32, kernel_size=(5, 5), padding="same")(b1_out)
         b2_norm1 = BatchNormalization()(b2_conv1)
         b2_active1 = Activation("sigmoid")(b2_norm1)
 
         b2_add = add([b1_out, b2_active1])
 
-
-
-        b2_convMid2 = Conv2D(filters=64, kernel_size=(5, 5), padding="same", kernel_initializer=initializer)(b2_add)
-        b2_convMid_norm2 = BatchNormalization()(b2_convMid2)
-        b2_convMid_out = Activation("sigmoid")(b2_convMid_norm2)
-
-
-        b2_convMid3 = Conv2D(filters=64, kernel_size=(5, 5), padding="same", kernel_initializer=initializer)(b2_convMid_out)
-        b2_convMid_norm = BatchNormalization()(b2_convMid3)
-        b2_convMid_active = Activation("sigmoid")(b2_convMid_norm)
-
-        bMid_add = add([b2_convMid_out, b2_convMid_active])
-
-
-        b2_conv2Mid2 = Conv2D(filters=64, kernel_size=(3, 3), padding="same", kernel_initializer=initializer)(bMid_add)
-        b2_conv2Mid_norm2 = BatchNormalization()(b2_conv2Mid2)
-        b2_conv2Mid_out = Activation("sigmoid")(b2_conv2Mid_norm2)
-
-
-        b2_conv2Mid3 = Conv2D(filters=64, kernel_size=(3, 3), padding="same", kernel_initializer=initializer)(b2_conv2Mid_out)
-        b2_conv2Mid_norm = BatchNormalization()(b2_conv2Mid3)
-        b2_conv2Mid_active = Activation("sigmoid")(b2_conv2Mid_norm)
-
-        bMid2_add = add([b2_conv2Mid_out, b2_conv2Mid_active])
-
-
-
-
-        b2_conv2 = Conv2D(filters=64, kernel_size=(3, 3), padding="same")(bMid2_add)
+        b2_conv2 = Conv2D(filters=64, kernel_size=(3, 3), padding="same")(b2_add)
         b2_norm2 = BatchNormalization()(b2_conv2)
         b2_out = Activation("sigmoid")(b2_norm2)
 
@@ -378,13 +338,28 @@ class Tools():
 
         b3_add = add([flat, b1_dense_active1])
 
+        b1_dense2 = Dense(units=4096, kernel_initializer=initializer)(b3_add)
+        b1_dense_norm2 = BatchNormalization()(b1_dense2)
+        b1_dense_out2 = Activation("sigmoid")(b1_dense_norm2)
 
-        last_dense = Dense(units=2048, kernel_initializer=initializer)(b3_add)
-        last_dense_norm1 = BatchNormalization()(last_dense)
-        last_dense_active1 = Activation("sigmoid")(last_dense_norm1)
 
+        b2_dense1 = Dense(units=4096, kernel_initializer=initializer)(b1_dense_out2)
+        b2_dense1_norm2 = BatchNormalization()(b2_dense1)
+        b2_dense1_active2 = Activation("sigmoid")(b2_dense1_norm2)
 
-        final_dense = Dense(units=L)(last_dense_active1)
+        b4_add = add([b1_dense_out2, b2_dense1_active2])
+
+        b3_dense = Dense(units=4096, kernel_initializer=initializer)(b4_add)
+        b3_norm1 = BatchNormalization()(b3_dense)
+        b3_out = Activation("sigmoid")(b3_norm1)
+
+        b3_dense2 = Dense(units=4096, kernel_initializer=initializer)(b3_out)
+        b3_norm2 = BatchNormalization()(b3_dense2)
+        b3_active1 = Activation("sigmoid")(b3_norm2)
+
+        b5_add = add([b3_out, b3_active1])
+
+        final_dense = Dense(units=L)(b5_add)
         softmax = Activation("softmax")(final_dense)
 
         model = Model(input, softmax)
