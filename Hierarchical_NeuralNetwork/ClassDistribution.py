@@ -19,12 +19,12 @@ for i in range(7):
             dist[label] = 1
 
 sort_dist = [i[0] for i in sorted(dist.items(), key=lambda x: x[1])]
-# for item in sort_dist:
-#     print(item[0], item[1])
+for item in sort_dist:
+    print(item)
 
-tools.split_classes(sort_dist)
+# tools.split_classes(sort_dist)
 
 
-tools.save(sort_dist, "data/Classes/Distributed.pkl")
-print(len(sort_dist))
-print("Done!")
+# tools.save(sort_dist, "data/Classes/Distributed.pkl")
+# print(len(sort_dist))
+# print("Done!")

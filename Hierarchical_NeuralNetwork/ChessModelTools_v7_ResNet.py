@@ -44,18 +44,17 @@ class Tools():
         nums = np.zeros((1, 1))
 
         for i, label in enumerate(labels):
-            if label in model.classes.keys():
-                nums[0][0] = model.classes[label]
+            nums[0][0] = model.classes[label]
                 # print(label)
                 # alpha = 0.000001
-                target += 1
-            else:
-                if random.random() > 0.991 and target/5 > other:
-                    nums[0][0] = model.classes["other"]
-                    other += 1
-                    # alpha = 0.000001
-                else:
-                    continue
+                # target += 1
+            # else:
+            #     if random.random() > 0.991 and target/5 > other:
+            #         nums[0][0] = model.classes["other"]
+            #         other += 1
+            #         # alpha = 0.000001
+            #     else:
+            #         continue
 
             samp = (np.reshape(x_samples[i], (1, 8, 8, 1))).astype(np.float32)
 
@@ -72,6 +71,13 @@ class Tools():
 
         del x_samples
         del labels
+        target = len(evaluateY)
+        other = int(target/5)
+        otherX, otherY = self.retrieve_MySql_shuffle(other, model.classes.keys(), conv=True)
+        evaluateX = np.concatenate((evaluateX, otherX), axis=0)
+        for label in otherY:
+            hot_other = self.one_hot_encode(pd.DataFrame(model.classes[label], dtype=np.int), len(model.classes))
+            evaluateY = np.concatenate((evaluateY, hot_other), axis=0)
             # backend.set_value(model.model.optimizer.learning_rate, alpha)
         # print("| Target: {} | Other: {} |".format(target, other))
         hist = model.model.fit(
@@ -107,19 +113,54 @@ class Tools():
         y.to_sql("Labels_{}".format(current), self.engine)
         print("Saved!")
 
+    def organize_data_to_MySql(self, x_samples, labels, current):
+        x = pd.DataFrame(x_samples, dtype=np.int)
+        y = self.label_nums(labels)
+        print("\tX_samples shape:", x_samples.shape)
+        print("\tLabels shape:", y.shape)
+        x.to_sql("Input_Features_NetworkSplit_{}".format(current), self.engine)
+        y.to_sql("Labels_NetworkSplit_{}".format(current), self.engine)
+        print("Saved!")
+
     def retrieve_MySql_table(self, count, conv=False):
         x = pd.read_sql_table("Input_Features_{}".format(count), self.engine)
         x = np.delete(x.to_numpy(), 0, 1)
         if conv is True:
             x = (np.reshape(x, (x.shape[0], 8, 8, 1))).astype(np.float32)
-        else:
-            x = pd.DataFrame(x, dtype=np.int)
+        # else:
+        #     x = pd.DataFrame(x, dtype=np.int)
         y = pd.read_sql_table("Labels_{}".format(count), self.engine)
         y = np.delete(y.to_numpy(), 0, 1)
         Iclasses = self.load("data/inverted_classes.pkl")
         labels = []
         for row in y:
             labels.append(Iclasses[row[0]])
+        # print("retrieved", x.shape)
+        return x, labels
+
+    def retrieve_MySql_shuffle(self, other, classes, conv=False):
+        db = random.choice([0, 1, 2, 3, 4, 5, 6])
+        x = pd.read_sql_table("Input_Features_{}".format(db), self.engine)
+        x = np.delete(x.to_numpy(), 0, 1)
+        if conv is True:
+            x = (np.reshape(x, (x.shape[0], 8, 8, 1))).astype(np.float32)
+        # else:
+        #     x = pd.DataFrame(x, dtype=np.int)
+        y = pd.read_sql_table("Labels_{}".format(count), self.engine)
+        y = np.delete(y.to_numpy(), 0, 1)
+        Iclasses = self.load("data/inverted_classes.pkl")
+        labels = []
+        for row in y:
+            labels.append(Iclasses[row[0]])
+        # print("retrieved", x.shape)
+        for i in range(len(labels)):
+            if labels[i] in classes:
+                x = np.delete(x, i, 0)
+                labels.pop(i)
+        while len(labels) > other:
+            rm = random.choice(list(range(len(labels))))
+            x = np.delete(x, rm, 0)
+            labels.pop(rm)
         return x, labels
 
     def MySql_Validation_data(self, count, conv=False):
