@@ -23,11 +23,7 @@ class Model():
             "target": 0,
             "other": 0
         }
-        if os.path.isdir("Hierarchical_Models_v1/{}/".format(self.name)) is False:
-            os.mkdir("Hierarchical_Models_v1/{}/".format(self.name))
-        # else:
-        #     self.loss = self.load(self.name + "_Loss.pkl")
-        #     self.accuracy = self.load(self.name + "_Accuracy.pkl")
+
 
     def close_TrainingSession(self, plot=True):
         LossAcc = self.load(self.name + "_LossAcc.pkl")
@@ -35,13 +31,13 @@ class Model():
             self.LossAcc["loss"] = np.concatenate((LossAcc["loss"], self.LossAcc["loss"][1:]), axis=0)
             self.LossAcc["accuracy"] = np.concatenate((LossAcc["accuracy"], self.LossAcc["accuracy"][1:]), axis=0)
         
+
+        self.save(self.LossAcc, "Hierarchical_Models_v1/{}/Model/{}_LossAcc.pkl".format(self.name, self.name))
+        # self.save(self.accuracy, self.name + "_Accuracy.pkl")
+        self.model.save("Hierarchical_Models_v1/{}/Model/{}_Model".format(self.name, self.name))
+
         if plot is True:
             self.PlotLoss()
-
-
-        self.save(self.LossAcc, "Hierarchical_Models_v1/{}/{}_LossAcc.pkl".format(self.name, self.name))
-        # self.save(self.accuracy, self.name + "_Accuracy.pkl")
-        self.model.save("Hierarchical_Models_v1/{}/{}_Model".format(self.name, self.name))
 
     def label_nums(self, labels):
         nums = np.zeros((len(labels), 1))
@@ -71,7 +67,7 @@ class Model():
 
     def PlotLoss(self):
 
-        path = self.name + ".png"
+        path = "Hierarchical_Models_v1/{}/Model/{}.png".format(self.name, self.name)
         cost = self.LossAcc["loss"]
         x_points = np.arange(len(cost))
 

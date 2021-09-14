@@ -14,8 +14,8 @@ from tensorflow.keras.layers import Activation, Dense, BatchNormalization, Conv2
 from tensorflow.keras.optimizers import Adam
 import random
 import shutil
-from os.path import exists, isdir
-from os import remove, rename, mkdir
+from os.path import exists
+from os import remove
 
 MYSQL_USER = "ant"
 MYSQL_PWD = "root"
@@ -32,62 +32,59 @@ class Tools():
     def __init__(self):
         self.engine = sql_engine
         self.save_path = None
+        # self.Iclasses = self.load("data/inverted_classes.pkl")
 
-    def train_RoboChess_SGD(self, model, x_samples, labels, epochs, verbose=False):
+    def train_RoboChess_SGD(self, model, x_samples, labels, epochs, conv=True, verbose=False):
         evaluateX, evaluateY = None, None
-        nums = None
+        samp , nums = None, None
         target, other = 0, 0
+        prnt = 0
+
+        # nums = np.zeros((1,))
         nums = np.zeros((1, 1))
 
-        for label in labels:
-            nums[0][0] = model.classes[label]
+        for i, label in enumerate(labels):
+            if label in model.classes.keys():
+                nums[0][0] = model.classes[label]
+                # print(label)
+                # alpha = 0.000001
+                target += 1
+            else:
+                if random.random() > 0.991 and target/5 > other:
+                    nums[0][0] = model.classes["other"]
+                    other += 1
+                    # alpha = 0.000001
+                else:
+                    continue
+
+            samp = (np.reshape(x_samples[i], (1, 8, 8, 1))).astype(np.float32)
+
             label = pd.DataFrame(nums, dtype=np.int)
             one_hot = self.one_hot_encode(label, len(model.classes))
             del label
 
-            if evaluateY is None:
+            if evaluateX is None:
+                evaluateX = np.copy(samp)
                 evaluateY = np.copy(one_hot)
             else:
+                evaluateX = np.concatenate((evaluateX, samp), axis=0)
                 evaluateY = np.concatenate((evaluateY, one_hot), axis=0)
-            del one_hot
 
-        evaluateX = (np.reshape(x_samples, (x_samples.shape[0], 8, 8, 1))).astype(np.float32)
         del x_samples
         del labels
-
-        target = len(evaluateY)
-        other = int(target/4.5)
+            # backend.set_value(model.model.optimizer.learning_rate, alpha)
+        # print("| Target: {} | Other: {} |".format(target, other))
+        hist = model.model.fit(
+            x=evaluateX, y=evaluateY, batch_size=32,
+            epochs=epochs, verbose=verbose, shuffle=True
+            )
+        loss = hist.history['loss']
+        accuracy = hist.history['accuracy']
         model.LossAcc["target"] = target
         model.LossAcc["other"] = other
-
-        for epoch in range(epochs):
-
-            otherX = self.retrieve_MySql_shuffle(other, model.id, conv=True)
-            # evaluateX = np.concatenate((evaluateX, otherX), axis=0)
-
-            other_ClassIdx = model.classes["other"]
-            label_OtherNums = [other_ClassIdx for i in range(otherX.shape[0])]
-            hot_other = self.one_hot_encode(pd.DataFrame(label_OtherNums, dtype=np.int), len(model.classes))
-            # evaluateY = np.concatenate((evaluateY, hot_other), axis=0)
-
-
-            # backend.set_value(model.model.optimizer.learning_rate, alpha)
-            # print("| Target: {} | Other: {} |".format(target, other))
-            hist = model.model.fit(
-                x=np.concatenate((evaluateX, otherX), axis=0),
-                y=np.concatenate((evaluateY, hot_other), axis=0),
-                batch_size=32,
-                epochs=1, verbose=verbose, shuffle=True
-                )
-
-            model.LossAcc["loss"] = np.append(model.LossAcc["loss"], hist.history['loss'])
-            model.LossAcc["accuracy"] = np.append(model.LossAcc["accuracy"], hist.history['accuracy'])
-            if epoch % 2 == 0:
-                with open("Hierarchical_Models_v1/{}/Log.txt".format(model.name), "a") as fh:
-                    fh.write("Model_{} | Epoch {} | Loss: {} | Accuracy: {} | Target: {} | Other: {}\n".format(
-                    model.id, epoch, model.LossAcc["loss"][-1], model.LossAcc["accuracy"][-1], model.LossAcc["target"], model.LossAcc["other"]
-                    ))
-
+        model.LossAcc["loss"] = np.append(model.LossAcc["loss"], loss)
+        model.LossAcc["accuracy"] = np.append(model.LossAcc["accuracy"], accuracy)
+        verbose = False
         return evaluateX, evaluateY, target, other
 
 
@@ -120,13 +117,13 @@ class Tools():
         print("Saved!")
 
     def retrieve_MySql_table(self, count, conv=False):
-        x = pd.read_sql_table("Input_Features_NetworkSplit_{}".format(count), self.engine)
+        x = pd.read_sql_table("Input_Features_{}".format(count), self.engine)
         x = np.delete(x.to_numpy(), 0, 1)
         if conv is True:
             x = (np.reshape(x, (x.shape[0], 8, 8, 1))).astype(np.float32)
         # else:
         #     x = pd.DataFrame(x, dtype=np.int)
-        y = pd.read_sql_table("Labels_NetworkSplit_{}".format(count), self.engine)
+        y = pd.read_sql_table("Labels_{}".format(count), self.engine)
         y = np.delete(y.to_numpy(), 0, 1)
         Iclasses = self.load("data/inverted_classes.pkl")
         labels = []
@@ -134,33 +131,6 @@ class Tools():
             labels.append(Iclasses[row[0]])
         # print("retrieved", x.shape)
         return x, labels
-
-    def retrieve_MySql_shuffle(self, other, network, conv=False):
-        X, Max = None, None
-        while X is None or X.shape[0] < other:
-            db = network
-            while db == network:
-                db = random.randrange(45, 197)
-            x = pd.read_sql_table("Input_Features_NetworkSplit_{}".format(db), self.engine)
-            x = np.delete(x.to_numpy(), 0, 1)
-            if conv is True:
-                x = (np.reshape(x, (x.shape[0], 8, 8, 1))).astype(np.float32)
-
-            if Max is None:
-                Max = x.shape[0]
-            else:
-                Max = X.shape[0] + x.shape[0]
-            while Max > other:
-                rm = random.randrange(0, x.shape[0])
-                x = np.delete(x, rm, 0)
-                Max -= 1
-
-            if X is None:
-                X = np.copy(x)
-            else:
-                X = np.concatenate((X, x), axis=0)
-
-        return X
 
     def MySql_Validation_data(self, count, conv=False):
         x = pd.read_sql_table("Input_Features_{}".format(count), self.engine)
@@ -176,8 +146,6 @@ class Tools():
         evalX, evalY, target, other = self.train_RoboChess_SGD(model, x_samples, labels, epochs, verbose=verbose)
         # print(evalX.shape)
         # self.evaluate(model, evalX, evalY, target, other)
-        del evalX
-        del evalY
 
     def Train_Hierarchy(self, x_samples, labels):
         for i in range(197):
@@ -221,6 +189,19 @@ class Tools():
         except Exception:
             return None
 
+    def PlotLoss(self, load=False, path="PlotLoss.png"):
+        if load is True:
+            cost = self.load("Loss.pkl")
+        else:
+            cost = self.loss
+        x_points = np.arange(len(cost))
+
+        plt.xlabel("iteration")
+        plt.ylabel("cost")
+        plt.suptitle("Training Cost")
+        plt.plot(x_points[1:], cost[1:], "b")
+        plt.savefig(path)
+
     def one_hot_encode(self, Y, classes, valid=False):
         """
         One hot encode function to be used to reshape
@@ -232,9 +213,19 @@ class Tools():
             return k.utils.to_categorical(Y[:, 1], classes)
         return k.utils.to_categorical(Y[:, 0], classes)
 
+    # def label_nums(self, labels, classes):
+    #     nums = np.zeros((len(labels), 1))
+    #     for x, label in enumerate(labels):
+    #         if label in classes.keys():
+    #             nums[x][0] = classes[label]
+    #         else:
+    #             nums[x][0] = classes["other"]
+    #     # return nums.T
+    #     return pd.DataFrame(nums, dtype=np.int)
+
     def label_nums(self, labels):
         classes = self.load("data/classes.pkl")
-        nums = np.zeros((x.shape[0], 1))
+        nums = np.zeros((len(labels), 1))
         for x, label in enumerate(labels):
             nums[x][0] = classes[label]
         del classes
@@ -270,42 +261,32 @@ class Tools():
 
     def load_TestModel(self, network, name=None):
         model = MyModel(
-            k.models.load_model("Hierarchical_Models_v1/{}/Model/{}_Model".format(name, name)),
+            k.models.load_model("Hierarchical_Models_v1/{}".format(name)),
             network,
             self.get_class_split(network),
             name=name
             )
         return model
 
-    def create_TestModel(self, network, filters=None, learning_rate=0.00001, name=None, activation="sigmoid"):
+    def create_TestModel(self, network, filters=None, learning_rate=0.000001, name=None):
         if network == 196:
             neurons = 9
         else:
             neurons = 11
-        if exists("Hierarchical_Models_v1/{}/Model".format(name)) is True:
-            shutil.rmtree("Hierarchical_Models_v1/{}/Model".format(name))
+        if exists("Hierarchical_Models_v1/{}".format(name)) is True:
+            shutil.rmtree("Hierarchical_Models_v1/{}".format(name))
+            remove(name + "_LossAcc.pkl")
+            remove("TestNet_{}.png".format(network))
 
-        if isdir("Hierarchical_Models_v1/{}/".format(name)) is False:
-            mkdir("Hierarchical_Models_v1/{}/".format(name))
-
-        if isdir("Hierarchical_Models_v1/{}/Model/".format(name)) is False:
-            mkdir("Hierarchical_Models_v1/{}/Model/".format(name))
-
-
-        init = self.get_ConvNet(11, filters, learning_rate, activation=activation)
+        init = self.get_ConvNet(11, filters, learning_rate)
         model = MyModel(
             init,
             network,
             self.get_class_split(network),
             name=name
             )
-
-        next = "\n\n\n---------------------------------------------\n\n\n"
-        with open("Hierarchical_Models_v1/{}/Log.txt".format(name), "a") as fh:
-            fh.write(
-                "{}Network_{}\nlearning rate: {}\n".format(next, network, learning_rate)
-                )
-
+        with open("Hierarchical_Models_v1/{}/Log.txt".format(name), "w") as fh:
+            fh.write("Network_{}\nlearning rate: {}")
         return model
 
     def get_class_split(self, idx):
@@ -339,34 +320,28 @@ class Tools():
         self.save(invert_classes, "data/inverted_classes.pkl")
         print(len(classes), len(invert_classes))
 
-
-    def get_ConvNet(self, L, filters=None, learning_rate=0.00001, activation="sigmoid"):
+    def get_ConvNet(self, L, filters=None, learning_rate=0.00001):
         initializer = k.initializers.HeNormal()
         # initializer = k.initializers.GlorotNormal()
         # initializer = k.initializers.GlorotUniform()
         # initializer = k.initializers.HeUniform()
         # initializer = k.initializers.Orthogonal()
-
         input = k.Input(shape=(8, 8, 1))
         norm0 = BatchNormalization()(input)
 
-        # if filters == "custom":
-        #     b1_conv1 = Conv2D(filters=13, kernel_size=(7, 7), padding="same", kernel_initializer=my_filter)(norm0)
-        #     b1_norm1 = BatchNormalization()(b1_conv1)
-        #     active1 = Activation(activation)(b1_norm1)
-
-        b1_conv1 = Conv2D(filters=32, kernel_size=(7, 7), padding="same")(norm0)
-        b1_norm1 = BatchNormalization()(b1_conv1)
-        active1 = Activation(activation)(b1_norm1)
+        if filters == "custom":
+            b1_conv1 = Conv2D(filters=13, kernel_size=(7, 7), padding="same", kernel_initializer=my_filter)(norm0)
+            b1_norm1 = BatchNormalization()(b1_conv1)
+            active1 = Activation("sigmoid")(b1_norm1)
 
         b1_conv2 = Conv2D(filters=32, kernel_size=(7, 7), padding="same")(active1)
         b1_norm2 = BatchNormalization()(b1_conv2)
-        b1_out = Activation(activation)(b1_norm2)
+        b1_out = Activation("sigmoid")(b1_norm2)
 
 
         b2_conv1 = Conv2D(filters=32, kernel_size=(7, 7), padding="same")(b1_out)
         b2_norm1 = BatchNormalization()(b2_conv1)
-        b2_active1 = Activation(activation)(b2_norm1)
+        b2_active1 = Activation("sigmoid")(b2_norm1)
 
         b2_add = add([b1_out, b2_active1])
 
@@ -374,45 +349,33 @@ class Tools():
 
         b2_convMid2 = Conv2D(filters=64, kernel_size=(5, 5), padding="same", kernel_initializer=initializer)(b2_add)
         b2_convMid_norm2 = BatchNormalization()(b2_convMid2)
-        b2_convMid_out = Activation(activation)(b2_convMid_norm2)
+        b2_convMid_out = Activation("sigmoid")(b2_convMid_norm2)
 
 
         b2_convMid3 = Conv2D(filters=64, kernel_size=(5, 5), padding="same", kernel_initializer=initializer)(b2_convMid_out)
         b2_convMid_norm = BatchNormalization()(b2_convMid3)
-        b2_convMid_active = Activation(activation)(b2_convMid_norm)
+        b2_convMid_active = Activation("sigmoid")(b2_convMid_norm)
 
         bMid_add = add([b2_convMid_out, b2_convMid_active])
 
 
         b2_conv2Mid2 = Conv2D(filters=64, kernel_size=(3, 3), padding="same", kernel_initializer=initializer)(bMid_add)
         b2_conv2Mid_norm2 = BatchNormalization()(b2_conv2Mid2)
-        b2_conv2Mid_out = Activation(activation)(b2_conv2Mid_norm2)
+        b2_conv2Mid_out = Activation("sigmoid")(b2_conv2Mid_norm2)
 
 
         b2_conv2Mid3 = Conv2D(filters=64, kernel_size=(3, 3), padding="same", kernel_initializer=initializer)(b2_conv2Mid_out)
         b2_conv2Mid_norm = BatchNormalization()(b2_conv2Mid3)
-        b2_conv2Mid_active = Activation(activation)(b2_conv2Mid_norm)
+        b2_conv2Mid_active = Activation("sigmoid")(b2_conv2Mid_norm)
 
         bMid2_add = add([b2_conv2Mid_out, b2_conv2Mid_active])
 
 
-        b2_conv3Mid2 = Conv2D(filters=64, kernel_size=(3, 3), padding="same", kernel_initializer=initializer)(bMid2_add)
-        b2_conv3Mid_norm2 = BatchNormalization()(b2_conv3Mid2)
-        b2_conv3Mid_out = Activation(activation)(b2_conv3Mid_norm2)
 
 
-        b2_conv3Mid3 = Conv2D(filters=64, kernel_size=(3, 3), padding="same", kernel_initializer=initializer)(b2_conv3Mid_out)
-        b2_conv3Mid_norm = BatchNormalization()(b2_conv3Mid3)
-        b2_conv3Mid_active = Activation(activation)(b2_conv3Mid_norm)
-
-        bMid3_add = add([b2_conv2Mid_out, b2_conv3Mid_active])
-
-
-
-
-        b2_conv2 = Conv2D(filters=64, kernel_size=(3, 3), padding="same")(bMid3_add)
+        b2_conv2 = Conv2D(filters=64, kernel_size=(3, 3), padding="same")(bMid2_add)
         b2_norm2 = BatchNormalization()(b2_conv2)
-        b2_out = Activation(activation)(b2_norm2)
+        b2_out = Activation("sigmoid")(b2_norm2)
 
         flat = Flatten()(b2_out)
 
@@ -421,17 +384,17 @@ class Tools():
 
         b1_dense1 = Dense(units=4096, kernel_initializer=initializer)(flat)
         b1_dense_norm1 = BatchNormalization()(b1_dense1)
-        b1_dense_active1 = Activation(activation)(b1_dense_norm1)
+        b1_dense_active1 = Activation("sigmoid")(b1_dense_norm1)
 
         b3_add = add([flat, b1_dense_active1])
 
 
-        # last_dense = Dense(units=2048, kernel_initializer=initializer)(b3_add)
-        # last_dense_norm1 = BatchNormalization()(last_dense)
-        # last_dense_active1 = Activation(activation)(last_dense_norm1)
+        last_dense = Dense(units=2048, kernel_initializer=initializer)(b3_add)
+        last_dense_norm1 = BatchNormalization()(last_dense)
+        last_dense_active1 = Activation("sigmoid")(last_dense_norm1)
 
 
-        final_dense = Dense(units=L)(b3_add)
+        final_dense = Dense(units=L)(last_dense_active1)
         softmax = Activation("softmax")(final_dense)
 
         model = Model(input, softmax)

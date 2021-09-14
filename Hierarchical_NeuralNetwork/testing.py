@@ -1,8 +1,9 @@
 import numpy as np
 import pandas as pd
 import sqlalchemy
+import random
 from ChessModelTools_v7_ResNet import Tools
-from sqlalchemy import create_engine
+# from sqlalchemy import create_engine
 
 # HBNB_MYSQL_USER = "ant"
 # HBNB_MYSQL_PWD = "root"
@@ -20,7 +21,11 @@ from sqlalchemy import create_engine
 # nums = np.reshape(nums, (3, 4))
 # nums = np.delete(nums, nums.shape[1] - 1, 1)
 # print(nums)
+
+
 tools = Tools()
+
+
 
 # count = np.arange(64)
 # count2 = np.arange(64)
@@ -79,8 +84,8 @@ tools = Tools()
 #     del d
 #     if x % 10 == 0:
 #         print("")
-
-
+# for x in range(100):
+#     print(random.randrange(6, 9))
 
 
 
@@ -125,6 +130,7 @@ tools = Tools()
 #     print("(id:{}, {}) ".format(item.id, len(item.classes)), end="")
 # print("")
 
+print(tools.load("data/current.pkl"))
 # tools.save(1, "data/current.pkl")
 # tools.invertClassDict()
 
@@ -153,8 +159,8 @@ tools = Tools()
 # classes = tools.load("data/classes.pkl")
 # print(classes)
 
-split = tools.load("data/Classes/Split_{}.pkl".format(17))
-print(split)
+# split = tools.load("data/Classes/Split_{}.pkl".format(17))
+# print(split)
 
 
 
