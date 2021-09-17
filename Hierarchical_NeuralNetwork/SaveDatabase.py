@@ -55,7 +55,7 @@ while True:
             if random.random() < 0.02:
                 result = random.choice(list(board.legal_moves))
             else:
-                result = engine.play(board,chess.engine.Limit(time=0.01))
+                result = engine.play(board,chess.engine.Limit(time=0.00001))
             board.push(result.move)
             if x_samples is not None:
                 x_samples = np.concatenate((x_samples, tools.fen_to_board(board.fen())), axis=0)

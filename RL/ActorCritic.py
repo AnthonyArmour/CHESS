@@ -11,7 +11,7 @@ import numpy as np
 
 class ActorCritic():
 
-    def __init__(self, action_space, lr=0.0001, convL=4, fcL=(2, 2048), filters=[32, 64, 64, 64],
+    def __init__(self, action_space, lr=0.001, convL=4, fcL=(2, 2048), filters=[32, 64, 64, 64],
                  activation="sigmoid", kernel_size=[(7, 7), (5, 5), (3, 3), (3, 3)]):
         self.action_space = action_space
         self.lr = lr
@@ -95,22 +95,26 @@ class ActorCritic():
         self.actions.append(action_onehot)
         self.rewards.append(reward)
 
-    def getAction(self, state):
+    # def getAction(self, state):
 
-        prediction = self.Actor.predict(state)[0]
-        return np.random.choice(self.action_space, p=prediction)
+    #     prediction = self.Actor.predict(state)[0]
+    #     return np.random.choice(self.action_space, p=prediction)
 
     def discount_rewards(self, reward):
         # Compute the gamma-discounted rewards over an episode
-        gamma = 0.99
+        gamma = 0.9
         running_add = 0
         #TD targets
+
+        # target = reward + self.gamma*critic_value_*(1-int(done))
+        # advantage = target - critic_value
+
         discounted_r = np.zeros_like(reward)
         for i in reversed(range(0,len(reward))):
             running_add = running_add * gamma + reward[i]
             discounted_r[i] = running_add
 
-        discounted_r -= np.mean(discounted_r)
+        discounted_r = discounted_r - np.mean(discounted_r)
         discounted_r /= np.std(discounted_r)
         return discounted_r
  

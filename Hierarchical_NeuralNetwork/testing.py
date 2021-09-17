@@ -131,7 +131,7 @@ tools = Tools()
 # print("")
 
 print(tools.load("data/current.pkl"))
-# tools.save(1, "data/current.pkl")
+# tools.save(13, "data/current.pkl")
 # tools.invertClassDict()
 
 # dist = tools.load("data/Classes/Distributed.pkl")

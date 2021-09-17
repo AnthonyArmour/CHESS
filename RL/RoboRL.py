@@ -1,6 +1,6 @@
 import chess
 import chess.engine
-# import random
+import random
 import numpy as np
 import os
 # import sys
@@ -15,18 +15,27 @@ class TrainRoboRL():
         self.saveFile = saveFile
         self.loadFile = loadFile
         self.max_avg = None
-        self.engine = chess.engine.SimpleEngine.popen_uci("stockfish_14_linux_x64_avx2/stockfish_14_x64_avx2")
+        self.batch = 0
+        self.engine = chess.engine.SimpleEngine.popen_uci("../stockfish_14_linux_x64_avx2/stockfish_14_x64_avx2")
         self.path = os.getcwd()
-        self.actionSpace = self.load("data/classes.pkl")
-        self.IactionSpace = self.load("data/inverted_classes.pkl")
+        self.actionSpace = self.load("../data/classes.pkl")
+        self.IactionSpace = self.load("../data/inverted_classes.pkl")
         self.Model = ActorCritic(len(self.actionSpace))
         self.board = chess.Board()
         self.illegal_moves = 0
         self.quickTrain = False
-        self.legal_cnt = {
-            "illegal": 0,
-            "legal": 0
+        self.e = 0
+        self.broken = 0
+        self.cached_reward_state = 0
+        self.info = {
+            "exploit": 0,
+            "explore": 0
         }
+        # self.legal_cnt = {
+        #     "illegal": 0,
+        #     "legal": 0,
+        #     "NetLegal": 0
+        # }
 
     def load(self, filename):
         """Loads object from pickle file"""
@@ -67,30 +76,46 @@ class TrainRoboRL():
 
     def takeAction(self, action, state):
         done = False
-        action = chess.Move.from_uci(self.IactionSpace[action])
-        if action in self.board.legal_moves:
-            self.board.push(action)
+        Action = chess.Move.from_uci(self.IactionSpace[action])
+        # print("\n\n\n")
+        # a = self.IactionSpace[action]
+        # for mv in list(self.board.legal_moves):
+        #     if str(mv) == a:
+        #         print("LEGAL MOVE")
+        if Action in self.board.legal_moves:
+            self.broken = 0
+            # print("TRUE")
+
+            self.board.push(Action)
             if self.board.is_checkmate():
-                reward = 200
+                reward = 50
                 done = True
                 next_state = None
             elif self.board.outcome() is not None:
                 done = "stail"
             else:
-                result = self.engine.play(self.board,chess.engine.Limit(time=0.1))
+                result = self.engine.play(self.board,chess.engine.Limit(time=0.000001))
                 self.board.push(result.move)
                 next_state = self.fen_to_board(self.board.fen())
-                reward = np.sum(next_state) - 64
+
+                reward_state = np.sum(next_state) - 64
+                reward = reward_state - self.cached_reward_state
+                self.cached_reward_state = reward_state
+
+                # reward = self.engine.PovScore()
                 if self.board.is_checkmate():
-                    reward -= 200
+                    reward -= 50
                     done = True
                     next_state = None
-            self.legal_cnt["legal"] += 1
+            # self.legal_cnt["legal"] += 1
+            # self.legal_cnt["NetLegal"] += 1
         else:
-            reward = -50
-            next_state = False
+            # print("here")
+            self.broken += 1
+            reward = -1
+            next_state = state
             self.illegal_moves += 1
-            self.legal_cnt["illegal"] += 1
+            # self.legal_cnt["illegal"] += 1
             if self.illegal_moves == 100:
                 self.illegal_moves = 0
                 done = True
@@ -120,15 +145,44 @@ class TrainRoboRL():
         # training Actor and Critic networks
         self.Model.Actor.fit(states, actions, sample_weight=advantages, epochs=1, verbose=0)
         self.Model.Critic.fit(states, discounted_r, epochs=1, verbose=0)
+        self.Model.states, self.Model.actions, self.Model.rewards = None, [], []
         # reset training memory
 
+    def getAction(self, state):
+        # rand = random.random()
+        # if rand < self.e/2100 or rand < 0.6:
+        #     prediction = self.Model.Actor.predict(state)[0]
+        #     # return np.random.choice(self.Model.action_space, p=prediction)
+        #     return np.argmax(prediction)
+        # else:
+        #     prediction = np.random.choice(list(self.board.legal_moves))
+        #     self.legal_cnt["NetLegal"] -= 1
+        #     return self.actionSpace[str(prediction)]
+        prediction = self.Model.Actor.predict(state)[0]
+        if random.random() < 0.98:
+            self.info["exploit"] += 1
+            legal_moves = np.zeros(prediction.shape[0])
+            for mv in list(self.board.legal_moves):
+                legal_moves[self.actionSpace[str(mv)]] = 1
+            prediction = prediction * legal_moves
+            return np.argmax(prediction)
+        else:
+            self.info["explore"] += 1
+            prediction = np.random.choice(list(self.board.legal_moves))
+            return self.actionSpace[str(prediction)]
+
+    def reset(self):
+        self.engine.quit()
+        self.board = chess.Board()
+        self.engine = chess.engine.SimpleEngine.popen_uci("../stockfish_14_linux_x64_avx2/stockfish_14_x64_avx2")
 
     def RunTrainingSession(self):
         # FixState = False
 
         for episode in range(self.episodes):
 
-            print("\nGame:", episode)
+            self.e = episode
+            # print("\nGame:", episode, end=" ")
 
             done, score, SAVE = False, 0, ""
             # board = chess.Board() #give whatever starting position here
@@ -138,29 +192,34 @@ class TrainRoboRL():
             state = self.fen_to_board(self.board.fen())
 
             moves = 0
-            self.legal_cnt["illegal"], self.legal_cnt["legal"] = 0, 0
+            self.info["exploit"], self.info["explore"] = 0, 0
+            # self.legal_cnt["illegal"], self.legal_cnt["legal"], self.legal_cnt["NetLegal"] = 0, 0, 0
             while not self.board.is_game_over():
 
-                # if moves % 200 == 0:
+                # if moves % 1000 == 0:
                 #     print("{} moves | {} illegal_moves | {} legal moves".format(moves, self.legal_cnt["illegal"], self.legal_cnt["legal"]))
 
-                # if not FixState:
-                action = self.Model.getAction(state)
+                action = self.getAction(state)
 
                 next_state, reward, done = self.takeAction(action, state)
-                # if not next_state:
-                #     FixState = True
-                #     continue
-                # else:
-                #     FixState = False
 
-                if done != "stail":
+
+                if self.broken > 2:
+                    self.Model.states, self.Model.actions, self.Model.rewards = None, [], []
+                    break
+                if done == "stail":
+                    self.batch += len(self.Model.rewards)
+                    self.trainGame()
+                    break
+                else:
                     self.Model.memory(state, action, reward)
                     state = next_state
                     score += reward
 
                 if done or self.quickTrain:
+
                     average = self.Model.PlotModel(score, episode)
+                    self.batch += len(self.Model.rewards)
 
                     if self.max_avg is None or average >= self.max_avg:
                         self.max_avg = average
@@ -168,14 +227,18 @@ class TrainRoboRL():
                         # SAVE = "SAVING"
                     else:
                         SAVE = ""
-                    if not self.quickTrain or moves % 1000 == 0:
-                        print("episode: {}/{}, score: {}, average: {:.2f} {}".format(episode, self.episodes, score, average, SAVE))
-                        print("{} moves | {} illegal_moves | {} legal moves".format(moves, self.legal_cnt["illegal"], self.legal_cnt["legal"]))
+                    
+                    if self.quickTrain is False and episode % 40 == 0:
+                        print("Game: {}/{}  |  {} Moves in last 5 batches".format(episode, self.episodes, self.batch+len(self.Model.rewards)))
+                        print("score: {}, average: {:.2f} {}".format(score, average, SAVE))
+                        # print("{} moves | {} illegal_moves | {} legal moves | {} NetLegal moves".format(moves, self.legal_cnt["illegal"], self.legal_cnt["legal"], self.legal_cnt["NetLegal"]))
+                        print("{} moves | Exploit: {} | Explore: {}".format(moves, self.info["exploit"], self.info["explore"]))
+                        self.batch = 0
 
                     self.trainGame()
                 moves += 1
 
-            self.board.reset()
+            self.reset()
 
 
         self.engine.quit()

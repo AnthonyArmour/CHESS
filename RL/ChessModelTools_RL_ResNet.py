@@ -101,6 +101,7 @@ class Tools():
         # with open("log_5.txt", "a") as fp:
             # fp.write("{} Evaluation -- Loss: {} | Accuracy: {}| Target Cnt: {} | Other Cnt: {}\n".format(model.name, loss, accuracy, target, other))
 
+
     def save_data_to_MySql(self, x_samples, labels, current):
         x = pd.DataFrame(x_samples, dtype=np.int)
         y = self.label_nums(labels)
