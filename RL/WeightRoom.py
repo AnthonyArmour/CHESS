@@ -1,4 +1,4 @@
-from RoboRL2 import TrainRoboRL
+from VersionControl.RoboRL6 import TrainRoboRL
 
-Model = TrainRoboRL(episodes=20, version="V1")
+Model = TrainRoboRL(episodes=5000, version="V2", loadfile=False)
 Model.RunTrainingSession()
