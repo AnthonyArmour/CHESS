@@ -9,7 +9,7 @@ disable_eager_execution()
 
 class ActorCritic():
 
-    def __init__(self, action_space, lr=0.00001, beta=0.00005, convL=4, fcL=(2, 2048), filters=[32, 64, 64, 64],
+    def __init__(self, action_space, lr=0.0000025, beta=0.00005, convL=4, fcL=(2, 2048), filters=[32, 64, 64, 64],
                  activation="tanh", kernel_size=[(7, 7), (5, 5), (3, 3), (3, 3)]):
         self.action_space = action_space
         self.lr = lr
@@ -23,24 +23,14 @@ class ActorCritic():
         # self.states, self.actions, self.rewards = None, [], []
 
 
-    def GetModel(self, paths=None):
-        if paths is None:
-            return self.get_ActorCritic_ResConvNet()
-        else:
-            actor = k.models.load_model(paths["actor"], custom_objects={"custom_loss": self.get_ActorCritic_ResConvNet.custom_loss})
-            critic = k.models.load_model(paths["critic"])
-            policy = k.models.load_model(paths["policy"])
-            return actor, critic, policy
+    def ConvResNet(self):
 
+        # delta = Input(shape=[1])
+        # def custom_loss(y_true, y_pred):
+        #     out = backend.clip(y_pred, 1e-8, 1-1e-8)
+        #     log_lik = y_true*backend.log(out)
 
-    def get_ActorCritic_ResConvNet(self, paths=None):
-
-        delta = Input(shape=[1])
-        def custom_loss(y_true, y_pred):
-            out = backend.clip(y_pred, 1e-8, 1-1e-8)
-            log_lik = y_true*backend.log(out)
-
-            return backend.sum(-log_lik*delta)
+        #     return backend.sum(-log_lik*delta)
 
 
         inp = Input(shape=(8, 8, 1))
@@ -79,11 +69,19 @@ class ActorCritic():
             fcB = Activation(self.activation)(fc)
 
             fc_add = add([fcA, fcB])
+        
+        return fc_add, initializer, inp
 
 
 
-        action = Dense(units=self.action_space, activation="softmax", kernel_initializer=initializer)(fc_add)
-        value = Dense(1, kernel_initializer=initializer)(fc_add)
+    def get_ActorCritic_ResConvNet(self, paths=None):
+
+        fc, init, inp = self.ConvResNet()
+        fc_coach, _, inpC = self.ConvResNet()
+
+        action = Dense(units=self.action_space, activation="softmax", kernel_initializer=init, kernel_regularizer='l2')(fc)
+        value = Dense(1, kernel_initializer=init, kernel_regularizer='l2')(fc)
+        coach_action = Dense(units=self.action_space, activation="softmax", kernel_initializer=init)(fc_coach)
 
         # def custom_loss(y_true, y_pred):
         #     out = backend.clip(y_pred, 1e-8, 1-1e-8)
@@ -92,19 +90,19 @@ class ActorCritic():
         #     return backend.sum(-log_lik*delta)
 
 
-        Actor = Model([inp, delta], action)
-        Actor.compile(loss=custom_loss, optimizer=Adam(lr=self.lr))
+        Actor = Model(inp, action)
+        Actor.compile(loss='categorical_crossentropy', optimizer=Adam(lr=self.lr))
 
         Critic = Model(inp, value)
         Critic.compile(loss='mse', optimizer=Adam(lr=self.beta))
 
-        Policy  = Model(inp, action)
-        Coach = Model(inp, action)
+        # Policy  = Model(inp, action)
+        Coach = Model(inpC, coach_action)
         if paths:
             Actor.load_weights(paths["actor"]) #, custom_objects={"custom_loss": custom_loss}
             Critic.load_weights(paths["critic"])
-            Policy.load_weights(paths["policy"])
+            # Policy.load_weights(paths["policy"])
             Coach.load_weights(paths["coach"])
 
-        return Actor, Critic, Policy, Coach
+        return Actor, Critic, Coach
 
