@@ -1,8 +1,7 @@
 import sys
 
-sys.path.insert(0, "/home/vagrant/CHESS/RL/Robo_API/API")
-
 from A2C_Model_2 import ActorCritic
+from multiprocessing import Process, Pipe, Lock
 import numpy as np
 import requests
 from io import BytesIO
@@ -14,8 +13,8 @@ import os
 class LearningZone():
 
     def __init__(self):
-        self.Model = ActorCritic()
-        self.Actor, self.Critic, _ = self.Model.get_ActorCritic_ResConvNet()
+        Model = ActorCritic()
+        self.Actor, self.Critic, _ = Model.get_ActorCritic_ResConvNet()
 
     @staticmethod
     def array_to_bytes(x: np.ndarray) -> bytes:
@@ -47,6 +46,7 @@ class LearningZone():
     def save_weights(self):
         self.Actor.save_weights("../Weights/Actor")
         self.Critic.save_weights("../Weights/Critic")
+        # self.Actor.save_weights("../Weights/Coach")
 
     def save_SAR(self, states, actions, rewards):
         if os.path.exists("../Memory/states.pkl"):
@@ -61,25 +61,65 @@ class LearningZone():
         self.pkl(rewards, "../Memory/rewards.pkl")
         print("------Saved Sates {}, Actions {}, and Rewards {}------\n".format(states.shape, actions.shape, rewards.shape))
 
-    def Collect_Games(self, ip, port, episodes=1, mcts_iterations=150, load=1):
-        params = {
-            "episodes": str(episodes),
-            "mcts_iterations": str(mcts_iterations),
-            "load": str(load)
-        }
+    def Collect_Games(self, conn, lock, ip, port, episodes=1, mcts_iterations=150, weights=None):
+
+        params = self.array_to_bytes(np.array([episodes, mcts_iterations, weights]))
         url = "http://{}:{}/api/Get_Data_From_A2C_MCTS".format(ip, port)
 
-        response = requests.post(url, json=params)
+        response = requests.post(url, data=params)
         SAR = self.bytes_to_array(response.content)
         states, actions, rewards, wins, losses = SAR
         print("Total Wins/Losses/W&L: {}/{}/{}\n".format(wins, losses, wins+losses))
+        lock.acquire()
         self.save_SAR(states, actions, rewards)
-        return wins, losses
+        lock.release()
+        conn.send([wins, losses, rewards.shape[0]])
+        conn.close()
 
-    def Fit_Memory(self, batch_size):
+    def MultiProcess_Mining(self, episodes, mcts_iterations, weights, ip1, ip2):
+        ports = ["5001", "5002"]
+        ips = [ip1, ip2]
+        parent_connections, processes = [], []
+        Wins, Losses, Samples = 0, 0, 0
+
+        lock = Lock()
+
+        for x, ip in enumerate(ips):
+            parent, child = Pipe()
+            parent_connections.append(parent)
+
+            process = Process(
+                target=self.Collect_Games, args=(
+                    child, lock, ip, ports[x], episodes,
+                    mcts_iterations, weights
+                    )
+                )
+            processes.append(process)
+        
+
+        for process in processes:
+            process.start()
+        
+        for process in processes:
+            process.join()
+
+        for parent_conn in parent_connections:
+            wins, losses, samples = parent_conn.recv()
+            Wins += wins
+            Losses += losses
+            Samples += samples
+        
+        return Wins, Losses, Samples
+
+
+    def Fit_Memory(self, batch_size, load_weights=True):
         states = self.load("../Memory/states.pkl")
         actions = self.load("../Memory/actions.pkl")
         rewards = self.load("../Memory/rewards.pkl")
+
+        if load_weights is True:
+            self.Actor.load_weights("../Weights/Actor")
+            self.Critic.load_weights("../Weights/Critic")
 
         rand = np.random.choice(np.arange(rewards.shape[0]), (batch_size,), replace=False)
 

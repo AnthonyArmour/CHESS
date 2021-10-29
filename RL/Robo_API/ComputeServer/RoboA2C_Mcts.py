@@ -4,13 +4,15 @@ import random
 import numpy as np
 import chess
 from A2C_Model_2 import ActorCritic
+import tensorflow as tf
 from MCTS_DRL import MCTS
 
 
 class A3CAgent():
 
-    def __init__(self, lr=0.00001, version=None):
+    def __init__(self, graph, lr=0.00001, version=None):
         self.gamma = 0.9
+        self.graph = graph
         self.end_game_reward = 0
         self.WHITE = False
         self.BLACK = True
@@ -43,15 +45,17 @@ class A3CAgent():
         del Model
 
         self.MCTS = MCTS(
-            IactionSpace, self.actionSpace, Imirror, mirror, recursion_limit=10,
+            graph, IactionSpace, self.actionSpace, Imirror, mirror,
             iterations=150, Actor=Actor, Value_Net=Critic, Oponent=Coach
             )
         del Imirror
 
-    def load_weights(self):
-        self.MCTS.Actor.load_weights(self.paths["actor"])
-        self.MCTS.Oponent.load_weights(self.paths["coach"])
-        self.MCTS.Value_Net.load_weights(self.paths["critic"])
+    def load_weights(self, weights):
+        # weights = (Actor, Critic, Coach)
+        with self.graph.as_default():
+            self.MCTS.Actor.set_weights(weights[0])
+            self.MCTS.Oponent.set_weights(weights[2])
+            self.MCTS.Value_Net.set_weights(weights[1])
 
 
     def load(self, filename):
@@ -128,11 +132,11 @@ class A3CAgent():
             return None, None, True
 
 
-    def Run_Games(self, episodes, mcts_iterations, load=True):
+    def Run_Games(self, connection, episodes, mcts_iterations, weights=None):
         self.wins, self.losses = 0.0001, 0.0001
         self.MCTS.iterations = mcts_iterations
-        if load:
-            self.load_weights()
+        if weights is not None:
+            self.load_weights(weights)
 
         for e in range(episodes):
 
@@ -167,6 +171,7 @@ class A3CAgent():
             action_memory = np.vstack(actions)
             reward_memory = np.full((action_memory.shape[0],), self.end_game_reward)
 
-        return state_memory, action_memory, reward_memory, self.wins, self.losses
+        connection.send([state_memory, action_memory, reward_memory, self.wins, self.losses])
+        connection.close()
 
 

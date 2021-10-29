@@ -53,10 +53,11 @@ class Node():
 
 class MCTS():
   def __init__(
-    self, IactionSpace, action_space, Imirror, mirror, iterations=5000,
+    self, graph, IactionSpace, action_space, Imirror, mirror, iterations=5000,
     Actor=None, Value_Net=None, Oponent=None
     ):
     self.Node = None
+    self.graph = graph
     self.board = chess.Board()
     self.iterations = iterations
     self.actionSpace = action_space
@@ -113,7 +114,8 @@ class MCTS():
     legal_moves = [str(mv) for mv in list(self.board.legal_moves)]
     if turn:
       state = self.fen_to_board(self.board.fen())
-      prediction = self.Actor.predict(state)[0]
+      with self.graph.as_default():
+        prediction = self.Actor.predict(state)[0]
       priors = np.zeros(len(legal_moves))
       for x, mv in enumerate(legal_moves):
         priors[x] = prediction[self.actionSpace[mv]]
@@ -121,7 +123,8 @@ class MCTS():
     else:
       state = self.fen_to_board(self.board.fen())
       state = self.flip_perspective(state)
-      prediction = self.Oponent.predict(state)[0]
+      with self.graph.as_default():
+        prediction = self.Oponent.predict(state)[0]
       priors = np.zeros(len(legal_moves))
       for x, mv in enumerate(legal_moves):
         priors[x] = prediction[self.actionSpace[self.Imirror[mv]]]
@@ -169,11 +172,13 @@ class MCTS():
         val = 1
     else:
       if turn:
-        val = self.Value_Net.predict(self.fen_to_board(self.board.fen()))[0]
+        with self.graph.as_default():
+          val = self.Value_Net.predict(self.fen_to_board(self.board.fen()))[0]
         # print("turn {} - value: {}".format(turn, val))
       else:
         state = self.flip_perspective(self.fen_to_board(self.board.fen()))
-        val = self.Value_Net.predict(state)[0]
+        with self.graph.as_default():
+          val = self.Value_Net.predict(state)[0]
         # print("turn {} - value: {}".format(turn, val))
     # else:
     #     val = -self.rollout(not turn, count+1)
@@ -215,7 +220,8 @@ class MCTS():
   def getAction(self, board, state):
 
       legal_moves = [str(mv) for mv in list(board.legal_moves)]
-      prediction = self.Actor.predict(state)[0]
+      with self.graph.as_default():
+        prediction = self.Actor.predict(state)[0]
       lm = np.zeros(prediction.shape[0])
 
       for mv in legal_moves:
@@ -237,7 +243,8 @@ class MCTS():
 
   def get_enemy_action(self, board, state):
       legal_moves = [str(mv) for mv in list(board.legal_moves)]
-      prediction = self.Oponent.predict(state)[0]
+      with self.graph.as_default():
+        prediction = self.Oponent.predict(state)[0]
       Legal_moves = np.zeros(prediction.shape[0])
 
       for mv in legal_moves:
